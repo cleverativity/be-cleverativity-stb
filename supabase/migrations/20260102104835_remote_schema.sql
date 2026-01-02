@@ -4813,6 +4813,28 @@ $$;
 ALTER FUNCTION "mod_pulse"."delete_old_chat_attachment"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "mod_pulse"."fn_trigger_fcm_push"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  PERFORM
+    net.http_post(
+      url := 'https://hffdufdierbghwcnjswt.supabase.co/functions/v1/push',
+      headers := '{"Content-Type": "application/json"}'::jsonb,
+      body := jsonb_build_object(
+        'record', row_to_json(NEW)::jsonb,
+        'event', 'INSERT'
+      ),
+      timeout_milliseconds := 1000
+    );
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "mod_pulse"."fn_trigger_fcm_push"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "mod_pulse"."get_user_notifications"("p_limit" integer DEFAULT 50, "p_offset" integer DEFAULT 0, "p_is_read" boolean DEFAULT NULL::boolean) RETURNS TABLE("id" "uuid", "name" "text", "description" "text", "code" "text", "type" "text", "is_read" boolean, "avatar_url" "text", "barcode" "text", "created_at" timestamp with time zone, "updated_at" timestamp with time zone, "created_by" "uuid", "updated_by" "uuid", "pulse_id" "uuid", "total_count" bigint)
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -5513,6 +5535,27 @@ $$;
 
 
 ALTER FUNCTION "mod_pulse"."mark_notification_as_read"("p_notification_id" "uuid") OWNER TO "postgres";
+
+
+CREATE OR REPLACE FUNCTION "mod_pulse"."send_fcm_notification"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  PERFORM net.http_post(
+    url := 'https://hffdufdierbghwcnjswt.supabase.co/functions/v1/push',
+    headers := '{"Content-Type": "application/json"}'::jsonb,
+    body := jsonb_build_object(
+      'notification_id', NEW.id
+    ),
+    timeout_milliseconds := 1000
+  );
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "mod_pulse"."send_fcm_notification"() OWNER TO "postgres";
 
 
 CREATE OR REPLACE FUNCTION "mod_pulse"."update_pulse_status"() RETURNS "trigger"
@@ -9069,8 +9112,7 @@ CREATE TABLE IF NOT EXISTS "mod_base"."announcements" (
     "created_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "created_by" "uuid",
-    "updated_by" "uuid",
-    "testing_column" "text"
+    "updated_by" "uuid"
 );
 
 
@@ -9091,7 +9133,8 @@ CREATE TABLE IF NOT EXISTS "mod_base"."article_categories" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "created_by" "uuid",
     "updated_by" "uuid",
-    "color" "text" DEFAULT '#808080'::"text"
+    "color" "text" DEFAULT '#808080'::"text",
+    "testing" "text"
 );
 
 
@@ -21541,6 +21584,12 @@ GRANT ALL ON FUNCTION "mod_pulse"."delete_old_chat_attachment"() TO "service_rol
 
 
 
+GRANT ALL ON FUNCTION "mod_pulse"."fn_trigger_fcm_push"() TO "anon";
+GRANT ALL ON FUNCTION "mod_pulse"."fn_trigger_fcm_push"() TO "authenticated";
+GRANT ALL ON FUNCTION "mod_pulse"."fn_trigger_fcm_push"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "mod_pulse"."get_user_notifications"("p_limit" integer, "p_offset" integer, "p_is_read" boolean) TO "anon";
 GRANT ALL ON FUNCTION "mod_pulse"."get_user_notifications"("p_limit" integer, "p_offset" integer, "p_is_read" boolean) TO "authenticated";
 GRANT ALL ON FUNCTION "mod_pulse"."get_user_notifications"("p_limit" integer, "p_offset" integer, "p_is_read" boolean) TO "service_role";
@@ -21640,6 +21689,12 @@ GRANT ALL ON FUNCTION "mod_pulse"."mark_all_notifications_as_read"() TO "service
 GRANT ALL ON FUNCTION "mod_pulse"."mark_notification_as_read"("p_notification_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "mod_pulse"."mark_notification_as_read"("p_notification_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "mod_pulse"."mark_notification_as_read"("p_notification_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "mod_pulse"."send_fcm_notification"() TO "anon";
+GRANT ALL ON FUNCTION "mod_pulse"."send_fcm_notification"() TO "authenticated";
+GRANT ALL ON FUNCTION "mod_pulse"."send_fcm_notification"() TO "service_role";
 
 
 
