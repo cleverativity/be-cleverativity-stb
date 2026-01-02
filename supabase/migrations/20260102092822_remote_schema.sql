@@ -85,6 +85,12 @@ CREATE SCHEMA IF NOT EXISTS "mod_wms";
 ALTER SCHEMA "mod_wms" OWNER TO "postgres";
 
 
+CREATE SCHEMA IF NOT EXISTS "supabase_functions";
+
+
+ALTER SCHEMA "supabase_functions" OWNER TO "postgres";
+
+
 CREATE EXTENSION IF NOT EXISTS "pg_net" WITH SCHEMA "extensions";
 
 
@@ -337,7 +343,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     new.updated_by := auth.uid();
     new.updated_at := now();
@@ -362,7 +368,7 @@ begin
     new."created_by",
     auth.uid()
   );
-  
+
   elsif tg_op = 'update' then
   -- on update, set the user performing this operation and the updated timestamp
   new."updated_by" := auth.uid();
@@ -388,7 +394,7 @@ begin
     new."created_by",
     auth.uid()
   );
-  
+
   elsif tg_op = 'update' then
   -- on update, set the user performing this operation and the updated timestamp
   new."updated_by" := auth.uid();
@@ -426,11 +432,11 @@ BEGIN
     -- Initialize error handling
     BEGIN
         -- Get the default domain_id, fallback to a hardcoded one if needed
-        SELECT id INTO v_domain_id 
-        FROM mod_admin.domains 
+        SELECT id INTO v_domain_id
+        FROM mod_admin.domains
         WHERE id = 'f89402d3-1096-405c-9919-e1f3f121ad84'::uuid
         LIMIT 1;
-        
+
         -- Fallback if domain doesn't exist
         IF v_domain_id IS NULL THEN
             v_domain_id := 'f89402d3-1096-405c-9919-e1f3f121ad84'::uuid;
@@ -515,11 +521,11 @@ BEGIN
     -- Extract department IDs from metadata with improved error handling
     BEGIN
         v_department_ids := ARRAY[]::uuid[];
-        
+
         -- Try to get departmentIds from user metadata first
         IF NEW.raw_user_meta_data ? 'departmentIds' THEN
             v_dept_json := NEW.raw_user_meta_data->'departmentIds';
-            
+
             -- Handle both array and string (JSON) formats
             IF jsonb_typeof(v_dept_json) = 'array' THEN
                 -- Direct array format
@@ -542,7 +548,7 @@ BEGIN
         -- Fallback to app metadata
         ELSIF NEW.raw_app_meta_data ? 'departmentIds' THEN
             v_dept_json := NEW.raw_app_meta_data->'departmentIds';
-            
+
             IF jsonb_typeof(v_dept_json) = 'array' THEN
                 SELECT array_agg(value::uuid) INTO v_department_ids
                 FROM jsonb_array_elements_text(v_dept_json)
@@ -710,15 +716,15 @@ CREATE OR REPLACE FUNCTION "mod_admin"."handle_user_deletion"() RETURNS "trigger
 BEGIN
     -- Delete from employees_departments first (due to foreign key constraints)
     DELETE FROM mod_base.employees_departments WHERE employee_id = OLD.id;
-    
+
     -- Delete from employees table
     DELETE FROM mod_base.employees WHERE id = OLD.id;
-    
+
     -- Delete from domain_users table
     DELETE FROM mod_admin.domain_users WHERE user_id = OLD.id;
-    
+
     -- Note: user_profiles will be automatically deleted due to CASCADE constraint
-    
+
     RETURN OLD;
 EXCEPTION WHEN OTHERS THEN
     RAISE NOTICE 'Error in handle_user_deletion trigger: %', SQLERRM;
@@ -745,7 +751,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -766,8 +772,8 @@ CREATE OR REPLACE FUNCTION "mod_admin"."is_subdomain"("child" "uuid", "parent" "
 with recursive hierarchy as (
     select id, parent_domain_id from mod_admin.domains where id = child
     union all
-    select d.id, d.parent_domain_id 
-    from mod_admin.domains d 
+    select d.id, d.parent_domain_id
+    from mod_admin.domains d
     join hierarchy h on d.id = h.parent_domain_id
 )
 select exists (select 1 from hierarchy where parent_domain_id = parent);
@@ -790,38 +796,38 @@ BEGIN
   IF NEW.status = 'FAILED' AND (OLD.status IS NULL OR OLD.status != 'FAILED') THEN
     -- Get article name if article_id exists
     IF NEW.article_id IS NOT NULL THEN
-      SELECT name INTO article_name 
-      FROM mod_base.articles 
+      SELECT name INTO article_name
+      FROM mod_base.articles
       WHERE id = NEW.article_id;
     ELSE
       article_name := 'Unknown Article';
     END IF;
-    
+
     -- Get work order name if work_order_id exists
     IF NEW.work_order_id IS NOT NULL THEN
-      SELECT name INTO work_order_name 
-      FROM mod_manufacturing.work_orders 
+      SELECT name INTO work_order_name
+      FROM mod_manufacturing.work_orders
       WHERE id = NEW.work_order_id;
     ELSE
       work_order_name := 'Standalone QC';
     END IF;
-    
+
     -- Create notification name and description
     notification_name := 'Quality Control Failed: ' || COALESCE(NEW.name, 'QC-' || NEW.id::text);
-    notification_description := 'Quality control for ' || article_name || 
-                              CASE 
+    notification_description := 'Quality control for ' || article_name ||
+                              CASE
                                 WHEN NEW.work_order_id IS NOT NULL THEN ' (Work Order: ' || work_order_name || ')'
                                 ELSE ''
                               END ||
                               ' has failed. Quantity checked: ' || NEW.quantity_checked ||
                               ', Passed: ' || NEW.quantity_passed ||
                               ', Failed: ' || NEW.quantity_failed;
-    
+
     -- Add additional details if notes exist
     IF NEW.notes IS NOT NULL AND NEW.notes != '' THEN
       notification_description := notification_description || '. Notes: ' || NEW.notes;
     END IF;
-    
+
     -- Insert notification for the WMS manager
     INSERT INTO mod_pulse.notifications (
       name,
@@ -841,7 +847,7 @@ BEGIN
       NULL -- department_id - can be set later if needed
     );
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -892,11 +898,11 @@ BEGIN
         WHERE internal_sales_order_id = NEW.sales_order_id
           AND article_id = NEW.article_id
           AND is_deleted = false;
-        
-        RAISE NOTICE 'Deleted work orders for internal_sales_order_id: %, article_id: %', 
+
+        RAISE NOTICE 'Deleted work orders for internal_sales_order_id: %, article_id: %',
                      NEW.sales_order_id, NEW.article_id;
     END IF;
-    
+
     RETURN NEW;
 END;
 $$;
@@ -921,11 +927,11 @@ BEGIN
         WHERE sales_order_id = NEW.sales_order_id
           AND article_id = NEW.article_id
           AND is_deleted = false;
-        
-        RAISE NOTICE 'Deleted work orders for sales_order_id: %, article_id: %', 
+
+        RAISE NOTICE 'Deleted work orders for sales_order_id: %, article_id: %',
                      NEW.sales_order_id, NEW.article_id;
     END IF;
-    
+
     RETURN NEW;
 END;
 $$;
@@ -951,9 +957,9 @@ BEGIN
         schema_name,
         table_name
     );
-    
+
     EXECUTE query_text INTO result;
-    
+
     RETURN COALESCE(result, 0);
 EXCEPTION
     WHEN OTHERS THEN
@@ -979,9 +985,9 @@ BEGIN
         schema_name,
         table_name
     );
-    
+
     EXECUTE query_text INTO result;
-    
+
     RETURN COALESCE(result, 0);
 EXCEPTION
     WHEN OTHERS THEN
@@ -1007,11 +1013,11 @@ BEGIN
   SELECT * INTO qc_type_imballo_record
   FROM mod_base.quality_control_types
   WHERE id = qc_type_imballo_id AND is_deleted = false;
-  
+
   SELECT * INTO qc_type_ddt_record
   FROM mod_base.quality_control_types
   WHERE id = qc_type_ddt_id AND is_deleted = false;
-  
+
   -- Create first QC record: Verifica imballo idoneo
   IF qc_type_imballo_record.id IS NOT NULL THEN
     INSERT INTO mod_base.quality_control (
@@ -1036,11 +1042,11 @@ BEGIN
       NEW.id,
       qc_type_imballo_record.id,
       NEW.domain_id,
-      CASE 
+      CASE
         WHEN NEW.sales_order_id IS NOT NULL THEN 'SALES_ORDER'
         ELSE NULL
       END,
-      CASE 
+      CASE
         WHEN NEW.sales_order_id IS NOT NULL THEN NEW.sales_order_id
         ELSE NEW.id
       END,
@@ -1048,7 +1054,7 @@ BEGIN
       NEW.created_by
     );
   END IF;
-  
+
   -- Create second QC record: Verifica DDT
   IF qc_type_ddt_record.id IS NOT NULL THEN
     INSERT INTO mod_base.quality_control (
@@ -1073,11 +1079,11 @@ BEGIN
       NEW.id,
       qc_type_ddt_record.id,
       NEW.domain_id,
-      CASE 
+      CASE
         WHEN NEW.sales_order_id IS NOT NULL THEN 'SALES_ORDER'
         ELSE NULL
       END,
-      CASE 
+      CASE
         WHEN NEW.sales_order_id IS NOT NULL THEN NEW.sales_order_id
         ELSE NEW.id
       END,
@@ -1085,7 +1091,7 @@ BEGIN
       NEW.created_by
     );
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -1108,7 +1114,7 @@ BEGIN
   -- Create notification name and description (without item count)
   notification_name := 'Nuovo Ordine di Vendita: ' || NEW.name;
   notification_description := 'L''ordine ' || NEW.sales_order_number || ' è stato creato';
-  
+
   -- Insert notification for the specified user
   INSERT INTO mod_pulse.notifications (
     name,
@@ -1127,7 +1133,7 @@ BEGIN
     NEW.domain_id,
     NULL -- department_id - can be set later if needed
   );
-  
+
   RETURN NEW;
 END;
 $$;
@@ -1173,7 +1179,7 @@ DECLARE
     v_serial_numbers TEXT[];
     v_serial_number TEXT;
     v_i INTEGER;
-    
+
     -- Category UUIDs for serial number generation
     v_serbatoi_category_id UUID := 'ccbfd8c9-dc44-450c-a9ac-349e6b6350e0'; -- Serbatoi
     v_scambiatori_srs_category_id UUID := 'f938840d-d929-450e-af27-e0e678bda7fe'; -- Scambiatori di calore SRS
@@ -1182,25 +1188,25 @@ DECLARE
     v_bollittori_category_id UUID := '1f7d33e4-b80b-40da-922f-a69863c76f75'; -- Bollittori
     v_defangatori_category_id UUID := '812aac37-04e7-4c8a-870e-8a7bd58f0c92'; -- Defangatori
     v_scambiatori_piastre_sp_category_id UUID := '47e1315c-a8d8-4776-b4ff-8652856f877d'; -- Scambiatori di calore a piastre SP
-    
+
     v_needs_serial_number BOOLEAN := FALSE;
 BEGIN
     -- Skip if this is a recipe component (is_recipe = true)
     IF NEW.is_recipe = true THEN
         RETURN NEW;
     END IF;
-    
+
     -- Get the article record
     SELECT * INTO v_article_record
     FROM mod_base.articles
     WHERE id = NEW.article_id
     AND is_deleted = false;
-    
+
     -- If article not found, skip
     IF v_article_record.id IS NULL THEN
         RETURN NEW;
     END IF;
-    
+
     -- Check if article qualifies for serial number generation
     -- Option 1: Article type is 'heat_exchanger' -> use Scambiatori di calore SRS category
     IF v_article_record.type = 'heat_exchanger' THEN
@@ -1219,25 +1225,25 @@ BEGIN
         v_needs_serial_number := TRUE;
         v_category_id := v_article_record.category_id;
     END IF;
-    
+
     -- If article doesn't qualify, skip
     IF NOT v_needs_serial_number OR v_category_id IS NULL THEN
         RETURN NEW;
     END IF;
-    
+
     -- Get current year and year suffix (last 2 digits)
     v_current_year := EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER;
     v_year_suffix := LPAD((v_current_year % 100)::TEXT, 2, '0');
-    
+
     -- Extract prefix from article name (first 2 characters)
     -- Handle cases where name might be shorter or have spaces
     v_prefix := UPPER(SUBSTRING(TRIM(v_article_record.name) FROM 1 FOR 2));
-    
+
     -- If prefix is less than 2 characters, skip
     IF LENGTH(v_prefix) < 2 THEN
         RETURN NEW;
     END IF;
-    
+
     -- Get or create counter for this category and year
     -- First, try to insert (will fail silently if exists due to unique constraint)
     INSERT INTO mod_base.serial_number_counters (
@@ -1254,53 +1260,53 @@ BEGIN
         NEW.created_by
     )
     ON CONFLICT (category_id, year) DO NOTHING;
-    
+
     -- Now select with FOR UPDATE to lock the row (prevents concurrent modifications)
     SELECT * INTO v_counter_record
     FROM mod_base.serial_number_counters
     WHERE category_id = v_category_id
     AND year = v_current_year
     FOR UPDATE;
-    
+
     -- This should never be NULL after the INSERT ... ON CONFLICT, but check anyway
     IF v_counter_record.id IS NULL THEN
         RAISE EXCEPTION 'Failed to get or create serial number counter for category % and year %', v_category_id, v_current_year;
     END IF;
-    
+
     -- Get quantity (convert to integer, rounding if needed)
     v_quantity := GREATEST(1, ROUND(NEW.quantity_ordered)::INTEGER);
-    
+
     -- Initialize array for serial numbers
     v_serial_numbers := ARRAY[]::TEXT[];
-    
+
     -- Generate serial numbers for each unit
     FOR v_i IN 1..v_quantity LOOP
         -- Increment the counter
         v_next_incremental := v_counter_record.last_incremental_number + 1;
-        
+
         -- Build serial number: PREFIX + YY + zero-padded incremental number (5 digits)
         v_serial_number := v_prefix || v_year_suffix || LPAD(v_next_incremental::TEXT, 5, '0');
-        
+
         -- Add to array
         v_serial_numbers := array_append(v_serial_numbers, v_serial_number);
-        
+
         -- Update counter for next iteration
         v_counter_record.last_incremental_number := v_next_incremental;
     END LOOP;
-    
+
     -- Update the counter in the database
     UPDATE mod_base.serial_number_counters
     SET last_incremental_number = v_counter_record.last_incremental_number,
         updated_at = NOW(),
         updated_by = NEW.created_by
     WHERE id = v_counter_record.id;
-    
+
     -- Join serial numbers with comma and update the sales_order_item
     UPDATE mod_base.sales_order_items
     SET serial_number = array_to_string(v_serial_numbers, ','),
         updated_at = NOW()
     WHERE id = NEW.id;
-    
+
     RETURN NEW;
 END;
 $$;
@@ -1309,8 +1315,8 @@ $$;
 ALTER FUNCTION "mod_base"."generate_serial_number_for_sales_order_item"() OWNER TO "postgres";
 
 
-COMMENT ON FUNCTION "mod_base"."generate_serial_number_for_sales_order_item"() IS 'Automatically generates serial numbers for sales_order_items when inserted. 
-Qualifies articles if type = "heat_exchanger" (uses Scambiatori di calore SRS category) 
+COMMENT ON FUNCTION "mod_base"."generate_serial_number_for_sales_order_item"() IS 'Automatically generates serial numbers for sales_order_items when inserted.
+Qualifies articles if type = "heat_exchanger" (uses Scambiatori di calore SRS category)
 or if category is one of: Serbatoi, Scambiatori di calore SRS, Preparatori, Coibentazioni, Bollittori, Defangatori, Scambiatori di calore a piastre SP.
 Generates serial numbers in format PREFIX[YY][incremental_nr] where incremental_nr is zero-padded to 5 digits.
 For quantity_ordered > 1, generates multiple serial numbers comma-separated.
@@ -1343,7 +1349,7 @@ BEGIN
     FROM mod_base.quality_control_checklist_results
     WHERE quality_control_id = qc_id
       AND is_deleted = false;
-    
+
     RETURN COALESCE(result, jsonb_build_object(
         'total_items', 0,
         'passed_items', 0,
@@ -1369,7 +1375,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -1402,7 +1408,7 @@ BEGIN
             updated_by = NEW.updated_by
         WHERE id = NEW.id
           AND is_archived = FALSE; -- Only update if not already archived
-        
+
         IF FOUND THEN
             RAISE NOTICE 'Successfully archived sales order % (status changed to completed)', NEW.id;
         END IF;
@@ -1437,7 +1443,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -1463,7 +1469,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -1515,7 +1521,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -1541,7 +1547,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -1567,7 +1573,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -1593,7 +1599,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -1618,27 +1624,27 @@ DECLARE
 BEGIN
     -- Only process when is_manufactured changes to TRUE
     IF NEW.is_manufactured = TRUE AND (OLD.is_manufactured IS NULL OR OLD.is_manufactured = FALSE) THEN
-        
+
         -- Get the sales_order_id (which references internal_sales_orders) from the updated item
         v_internal_sales_order_id := NEW.sales_order_id;
-        
+
         -- Skip if no sales_order_id
         IF v_internal_sales_order_id IS NULL THEN
             RAISE NOTICE 'Internal sales order item % has no sales_order_id, skipping completion check', NEW.id;
             RETURN NEW;
         END IF;
-        
+
         -- Count total items and manufactured items for this internal sales order
         -- Only count non-deleted items
-        SELECT 
+        SELECT
             COUNT(*) FILTER (WHERE is_deleted = false),
             COUNT(*) FILTER (WHERE is_deleted = false AND is_manufactured = true)
-        INTO 
+        INTO
             v_total_items,
             v_manufactured_items
         FROM mod_base.internal_sales_order_items
         WHERE sales_order_id = v_internal_sales_order_id;
-        
+
         -- Check if all items are manufactured
         IF v_total_items > 0 AND v_manufactured_items = v_total_items THEN
             -- Update the internal sales order status to 'completed'
@@ -1648,18 +1654,18 @@ BEGIN
                 updated_by = NEW.updated_by
             WHERE id = v_internal_sales_order_id
               AND status IS DISTINCT FROM 'completed'; -- Only update if not already completed
-            
+
             IF FOUND THEN
-                RAISE NOTICE 'Successfully marked internal sales order % as completed (all % items are manufactured)', 
+                RAISE NOTICE 'Successfully marked internal sales order % as completed (all % items are manufactured)',
                              v_internal_sales_order_id, v_total_items;
             END IF;
         ELSE
-            RAISE NOTICE 'Internal sales order % has % manufactured items out of % total items. Not marking as completed yet.', 
+            RAISE NOTICE 'Internal sales order % has % manufactured items out of % total items. Not marking as completed yet.',
                          v_internal_sales_order_id, v_manufactured_items, v_total_items;
         END IF;
-        
+
     END IF;
-    
+
     RETURN NEW;
 END;
 $$;
@@ -1766,7 +1772,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -1792,7 +1798,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -1815,22 +1821,22 @@ BEGIN
     -- If the INSERT doesn't explicitly provide created_by,
     -- default to the user performing this operation.
     NEW.created_by := COALESCE(NEW.created_by, auth.uid());
-    
+
     -- Auto-populate domain_id from user's JWT claims if not provided
     IF NEW.domain_id IS NULL THEN
       NEW.domain_id := (SELECT get_my_claim_text('domain_id')::uuid);
     END IF;
-    
+
     -- Set planned_date to now if not provided and status is PLANNED
     IF NEW.planned_date IS NULL AND NEW.status = 'PLANNED' THEN
       NEW.planned_date := now();
     END IF;
-    
+
   ELSIF TG_OP = 'UPDATE' THEN
     -- On UPDATE, set the user performing this operation and the updated timestamp
     NEW.updated_by := auth.uid();
     NEW.updated_at := now();
-    
+
     -- Auto-set timing fields based on status changes
     IF OLD.status != NEW.status THEN
       CASE NEW.status
@@ -1866,7 +1872,7 @@ BEGIN
     NEW.updated_by := auth.uid();
     NEW.updated_at := now();
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -1885,27 +1891,27 @@ DECLARE
 BEGIN
     -- Only process when is_manufactured changes to TRUE
     IF NEW.is_manufactured = TRUE AND (OLD.is_manufactured IS NULL OR OLD.is_manufactured = FALSE) THEN
-        
+
         -- Get the sales_order_id from the updated item
         v_sales_order_id := NEW.sales_order_id;
-        
+
         -- Skip if no sales_order_id
         IF v_sales_order_id IS NULL THEN
             RAISE NOTICE 'Sales order item % has no sales_order_id, skipping completion check', NEW.id;
             RETURN NEW;
         END IF;
-        
+
         -- Count total items and manufactured items for this sales order
         -- Only count non-deleted items
-        SELECT 
+        SELECT
             COUNT(*) FILTER (WHERE is_deleted = false),
             COUNT(*) FILTER (WHERE is_deleted = false AND is_manufactured = true)
-        INTO 
+        INTO
             v_total_items,
             v_manufactured_items
         FROM mod_base.sales_order_items
         WHERE sales_order_id = v_sales_order_id;
-        
+
         -- Check if all items are manufactured
         IF v_total_items > 0 AND v_manufactured_items = v_total_items THEN
             -- Update the sales order status to 'completed'
@@ -1915,18 +1921,18 @@ BEGIN
                 updated_by = NEW.updated_by
             WHERE id = v_sales_order_id
               AND status != 'completed'; -- Only update if not already completed
-            
+
             IF FOUND THEN
-                RAISE NOTICE 'Successfully marked sales order % as completed (all % items are manufactured)', 
+                RAISE NOTICE 'Successfully marked sales order % as completed (all % items are manufactured)',
                              v_sales_order_id, v_total_items;
             END IF;
         ELSE
-            RAISE NOTICE 'Sales order % has % manufactured items out of % total items. Not marking as completed yet.', 
+            RAISE NOTICE 'Sales order % has % manufactured items out of % total items. Not marking as completed yet.',
                          v_sales_order_id, v_manufactured_items, v_total_items;
         END IF;
-        
+
     END IF;
-    
+
     RETURN NEW;
 END;
 $$;
@@ -1950,7 +1956,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -1976,7 +1982,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -2007,7 +2013,7 @@ BEGIN
         NEW.updated_by := auth.uid();
         NEW.updated_at := NOW();
     END IF;
-    
+
     RETURN NEW;
 END;
 $$;
@@ -2027,7 +2033,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -2053,7 +2059,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -2083,7 +2089,7 @@ BEGIN
 
     -- Get the sales_order_id from the updated item
     v_sales_order_id := NEW.sales_order_id;
-    
+
     -- Skip if no sales_order_id
     IF v_sales_order_id IS NULL THEN
         RETURN NEW;
@@ -2115,20 +2121,20 @@ BEGIN
                 updated_by = NEW.updated_by
             WHERE id = v_sales_order_id
               AND status IS DISTINCT FROM 'completed'; -- Only update if not already completed
-            
+
             IF FOUND THEN
-                RAISE NOTICE 'Successfully marked sales order % as completed (all % items are shipped)', 
+                RAISE NOTICE 'Successfully marked sales order % as completed (all % items are shipped)',
                              v_sales_order_id, v_total_items;
             END IF;
         ELSE
-            RAISE NOTICE 'Sales order % has % shipped items out of % total items. Not marking as completed yet.', 
+            RAISE NOTICE 'Sales order % has % shipped items out of % total items. Not marking as completed yet.',
                          v_sales_order_id, v_shipped_items, v_total_items;
         END IF;
 
     EXCEPTION WHEN OTHERS THEN
         -- Log the error but don't abort the transaction
         -- This allows the sales_order_item update to complete even if updating sales_order status fails
-        RAISE WARNING 'Error in handle_update_sales_order_status_on_all_items_shipped for sales_order_item % (sales_order_id: %): %', 
+        RAISE WARNING 'Error in handle_update_sales_order_status_on_all_items_shipped for sales_order_item % (sales_order_id: %): %',
             NEW.id, v_sales_order_id, SQLERRM;
         -- Return NEW to allow the sales_order_item update to succeed
     END;
@@ -2157,21 +2163,21 @@ BEGIN
   -- Only proceed if production_date actually changed
   IF OLD.production_date IS DISTINCT FROM NEW.production_date THEN
     -- Get the internal sales order name for context
-    SELECT name INTO internal_sales_order_name 
-    FROM mod_base.internal_sales_orders 
+    SELECT name INTO internal_sales_order_name
+    FROM mod_base.internal_sales_orders
     WHERE id = NEW.sales_order_id;  -- sales_order_id in internal_sales_order_items references internal_sales_orders.id
-    
+
     -- Determine the production message based on the new production_date
     IF NEW.production_date IS NULL THEN
       production_message := 'la data di produzione inizierà a [DA DEFINIRE]';
     ELSE
       production_message := 'la produzione è stata spostata al ' || NEW.production_date::text;
     END IF;
-    
+
     -- Create notification name and description
     notification_name := 'Aggiornamento Produzione: ' || NEW.name;
     notification_description := 'L''ordine interno "' || COALESCE(internal_sales_order_name, 'Ordine Interno Sconosciuto') || '" - Articolo "' || NEW.name || '" ' || production_message;
-    
+
     -- Only send notification if there's a created_by user
     IF NEW.created_by IS NOT NULL THEN
       -- Insert notification for the user who created the item
@@ -2194,7 +2200,7 @@ BEGIN
       );
     END IF;
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -2224,14 +2230,14 @@ BEGIN
     SELECT iso.name, iso.sales_order_number INTO internal_sales_order_name, internal_sales_order_number
     FROM mod_base.internal_sales_orders iso
     WHERE iso.id = NEW.sales_order_id;
-    
+
     -- Create notification name and description
     notification_name := 'Ordine Interno Programmato: ' || COALESCE(internal_sales_order_number, internal_sales_order_name, 'Ordine Interno Sconosciuto');
-    notification_description := 'L''ordine interno "' || COALESCE(internal_sales_order_name, 'Ordine Interno Sconosciuto') || 
-                              '" (Numero: ' || COALESCE(internal_sales_order_number, 'Non disponibile') || 
-                              ') - Articolo "' || NEW.name || 
+    notification_description := 'L''ordine interno "' || COALESCE(internal_sales_order_name, 'Ordine Interno Sconosciuto') ||
+                              '" (Numero: ' || COALESCE(internal_sales_order_number, 'Non disponibile') ||
+                              ') - Articolo "' || NEW.name ||
                               '" è stato programmato per la produzione il ' || TO_CHAR(NEW.production_date, 'DD/MM/YYYY');
-    
+
     -- Insert notification for Fabrizio
     INSERT INTO mod_pulse.notifications (
       name,
@@ -2251,7 +2257,7 @@ BEGIN
       NULL -- department_id - can be set later if needed
     );
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -2285,22 +2291,22 @@ BEGIN
   FOR parent_item IN SELECT * FROM jsonb_array_elements(bom_data_array)
   LOOP
     v_parent_article_id := parent_item->>'parent_article_id';
-    
+
     -- Skip if we've already processed this parent article (handles duplicates in array)
     IF v_parent_article_id = ANY(processed_parents) THEN
       CONTINUE;
     END IF;
-    
+
     -- Mark this parent as processed
     processed_parents := array_append(processed_parents, v_parent_article_id);
-    
+
     bom_data := parent_item->'bom_data';
-    
+
     -- Delete any existing BOM relationships for this parent article first
     -- This handles duplicates the same way as the old process: delete all, then insert new
     DELETE FROM mod_base.bom_articles
     WHERE parent_article_id = v_parent_article_id::uuid;
-    
+
     -- Loop through each component in the BOM
     FOR component_item IN SELECT * FROM jsonb_array_elements(bom_data)
     LOOP
@@ -2309,7 +2315,7 @@ BEGIN
         quantity_val := (component_item->>'quantity')::numeric;
         position_val := (component_item->>'position')::integer;
         note_val := component_item->>'note';
-        
+
         -- Insert new BOM relationship
         INSERT INTO mod_base.bom_articles (
           parent_article_id,
@@ -2324,9 +2330,9 @@ BEGIN
           position_val,
           COALESCE(note_val, '')
         );
-        
+
         inserted_count := inserted_count + 1;
-        
+
       EXCEPTION WHEN OTHERS THEN
         error_count := error_count + 1;
         errors := errors || jsonb_build_object(
@@ -2337,7 +2343,7 @@ BEGIN
       END;
     END LOOP;
   END LOOP;
-  
+
   -- Return result
   RETURN jsonb_build_object(
     'success', error_count = 0,
@@ -2368,21 +2374,21 @@ BEGIN
   -- Only proceed if production_date actually changed
   IF OLD.production_date IS DISTINCT FROM NEW.production_date THEN
     -- Get the sales order name for context
-    SELECT name INTO sales_order_name 
-    FROM mod_base.sales_orders 
+    SELECT name INTO sales_order_name
+    FROM mod_base.sales_orders
     WHERE id = NEW.sales_order_id;
-    
+
     -- Determine the production message based on the new production_date
     IF NEW.production_date IS NULL THEN
       production_message := 'la data di produzione inizierà a [DA DEFINIRE]';
     ELSE
       production_message := 'la produzione è stata spostata al ' || NEW.production_date::text;
     END IF;
-    
+
     -- Create notification name and description
     notification_name := 'Aggiornamento Produzione: ' || NEW.name;
     notification_description := 'L''ordine "' || COALESCE(sales_order_name, 'Ordine Sconosciuto') || '" - Articolo "' || NEW.name || '" ' || production_message;
-    
+
     -- Only send notification if there's a created_by user
     IF NEW.created_by IS NOT NULL THEN
       -- Insert notification for the user who created the item
@@ -2405,7 +2411,7 @@ BEGIN
       );
     END IF;
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -2431,14 +2437,14 @@ BEGIN
     SELECT so.name, so.sales_order_number INTO sales_order_name, sales_order_number
     FROM mod_base.sales_orders so
     WHERE so.id = NEW.sales_order_id;
-    
+
     -- Create notification name and description
     notification_name := 'Ordine Programmato: ' || COALESCE(sales_order_number, sales_order_name, 'Ordine Sconosciuto');
-    notification_description := 'L''ordine "' || COALESCE(sales_order_name, 'Ordine Sconosciuto') || 
-                              '" (Numero: ' || COALESCE(sales_order_number, 'Non disponibile') || 
-                              ') - Articolo "' || NEW.name || 
+    notification_description := 'L''ordine "' || COALESCE(sales_order_name, 'Ordine Sconosciuto') ||
+                              '" (Numero: ' || COALESCE(sales_order_number, 'Non disponibile') ||
+                              ') - Articolo "' || NEW.name ||
                               '" è stato programmato per la produzione il ' || TO_CHAR(NEW.production_date, 'DD/MM/YYYY');
-    
+
     -- Insert notification for Fabrizio
     INSERT INTO mod_pulse.notifications (
       name,
@@ -2458,7 +2464,7 @@ BEGIN
       NULL -- department_id - can be set later if needed
     );
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -2502,11 +2508,11 @@ BEGIN
       ELSE
         status_message := 'lo stato è stato aggiornato a "' || COALESCE(NEW.status, 'Sconosciuto') || '"';
     END CASE;
-    
+
     -- Create notification name and description
     notification_name := 'Aggiornamento Stato Ordine: ' || NEW.name;
     notification_description := 'L''ordine "' || NEW.name || '" che hai aggiunto ' || status_message;
-    
+
     -- Only send notification if there's a created_by user
     IF NEW.created_by IS NOT NULL THEN
       -- Insert notification for the user who created the order
@@ -2529,7 +2535,7 @@ BEGIN
       );
     END IF;
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -2639,19 +2645,19 @@ DECLARE
 BEGIN
     -- Get current year's last 2 digits
     year_part := to_char(CURRENT_DATE, 'YY');
-    
+
     -- Create a sequence name specific to this table
     sequence_name := table_name || '_code_seq';
-    
+
     -- Create sequence if it doesn't exist
     EXECUTE format('CREATE SEQUENCE IF NOT EXISTS %I START 1', sequence_name);
-    
+
     -- Get next value from sequence
     EXECUTE format('SELECT nextval(%L)', sequence_name) INTO next_val;
-    
+
     -- Format the result: PREFIX + YY + '-' + 6-digit number
     result := table_prefix || year_part || '-' || LPAD(next_val::text, 6, '0');
-    
+
     RETURN result;
 END;
 $$;
@@ -2878,7 +2884,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -2902,7 +2908,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     new.updated_by := auth.uid();
     new.updated_at := now();
@@ -2927,7 +2933,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -2953,7 +2959,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -2979,7 +2985,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -3024,7 +3030,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -3063,8 +3069,8 @@ BEGIN
         WHEN 'is_deleted' THEN 9090
         ELSE sort_order
     END
-    WHERE field_name IN ('id', 'avatar_url', 'name', 'description', 
-                        'status', 'created_at', 'created_by', 'updated_at', 
+    WHERE field_name IN ('id', 'avatar_url', 'name', 'description',
+                        'status', 'created_at', 'created_by', 'updated_at',
                         'updated_by', 'is_deleted');
 
     -- Update remaining fields with sequential sort_order values
@@ -3074,8 +3080,8 @@ BEGIN
                ROW_NUMBER() OVER (ORDER BY field_name) as row_num
         FROM mod_datalayer.fields
         WHERE sort_order != 1
-        AND field_name NOT IN ('id', 'avatar_url', 'name', 'description', 
-                             'status', 'created_at', 'created_by', 'updated_at', 
+        AND field_name NOT IN ('id', 'avatar_url', 'name', 'description',
+                             'status', 'created_at', 'created_by', 'updated_at',
                              'updated_by', 'is_deleted')
     )
     UPDATE mod_datalayer.fields f
@@ -3095,7 +3101,7 @@ CREATE OR REPLACE FUNCTION "mod_datalayer"."sync_fields"() RETURNS "void"
 BEGIN
     -- Upsert fields (columns) for tables in modules (schemas) starting with mod_
     WITH constraints_info AS (
-        SELECT 
+        SELECT
             c.table_schema,
             c.table_name,
             c.column_name,
@@ -3108,39 +3114,39 @@ BEGIN
             MAX(CASE WHEN tc.constraint_type = 'FOREIGN KEY' THEN ccu.column_name END) as references_field
         FROM information_schema.columns c
         -- Join with mod_datalayer.tables to ensure we only process registered tables
-        INNER JOIN mod_datalayer.tables mt 
-            ON c.table_schema = mt.schema_name 
+        INNER JOIN mod_datalayer.tables mt
+            ON c.table_schema = mt.schema_name
             AND c.table_name = mt.table_name
-        LEFT JOIN information_schema.key_column_usage kcu 
-            ON c.table_schema = kcu.table_schema 
-            AND c.table_name = kcu.table_name 
+        LEFT JOIN information_schema.key_column_usage kcu
+            ON c.table_schema = kcu.table_schema
+            AND c.table_name = kcu.table_name
             AND c.column_name = kcu.column_name
-        LEFT JOIN information_schema.table_constraints tc 
-            ON kcu.constraint_name = tc.constraint_name 
+        LEFT JOIN information_schema.table_constraints tc
+            ON kcu.constraint_name = tc.constraint_name
             AND kcu.table_schema = tc.table_schema
-        LEFT JOIN information_schema.constraint_column_usage ccu 
-            ON tc.constraint_name = ccu.constraint_name 
+        LEFT JOIN information_schema.constraint_column_usage ccu
+            ON tc.constraint_name = ccu.constraint_name
             AND tc.table_schema = ccu.table_schema
         WHERE c.table_schema LIKE 'mod_%'
         GROUP BY c.table_schema, c.table_name, c.column_name, c.data_type, c.is_nullable
     )
     INSERT INTO mod_datalayer.fields (
-        schema_name, 
-        table_name, 
-        field_name, 
-        name, 
-        data_type, 
+        schema_name,
+        table_name,
+        field_name,
+        name,
+        data_type,
         is_nullable,
         is_primary_key,
         is_foreign_key,
         references_schema,
         references_table,
         references_field,
-        is_deleted, 
-        created_at, 
+        is_deleted,
+        created_at,
         updated_at
     )
-    SELECT 
+    SELECT
         table_schema,
         table_name,
         column_name,
@@ -3173,8 +3179,8 @@ BEGIN
     WHERE (schema_name, table_name, field_name) NOT IN (
         SELECT c.table_schema, c.table_name, c.column_name
         FROM information_schema.columns c
-        INNER JOIN mod_datalayer.tables mt 
-            ON c.table_schema = mt.schema_name 
+        INNER JOIN mod_datalayer.tables mt
+            ON c.table_schema = mt.schema_name
             AND c.table_name = mt.table_name
         WHERE c.table_schema LIKE 'mod_%'
     )
@@ -3192,23 +3198,23 @@ CREATE OR REPLACE FUNCTION "mod_datalayer"."sync_modules"() RETURNS "void"
 BEGIN
     -- Upsert modules (schemas) that start with mod_
     INSERT INTO mod_datalayer.modules (schema_name, name, public_folder, code_folder, title, is_deleted, created_at, updated_at)
-    SELECT 
-        nspname, 
+    SELECT
+        nspname,
         substring(nspname FROM 5),  -- Remove 'mod_' prefix for name
         substring(nspname FROM 5),  -- Example for public_folder
         substring(nspname FROM 5),  -- Example for code_folder
         substring(nspname FROM 5),  -- Example for title
-        FALSE, 
-        NOW(), 
+        FALSE,
+        NOW(),
         NOW()
     FROM pg_namespace
     WHERE nspname LIKE 'mod_%'
     ON CONFLICT (schema_name) DO UPDATE
-    SET 
+    SET
         name = EXCLUDED.name,
         public_folder = EXCLUDED.public_folder,
         code_folder = EXCLUDED.code_folder,
-        is_deleted = FALSE, 
+        is_deleted = FALSE,
         updated_at = EXCLUDED.updated_at;
 
     -- Mark modules (schemas) that no longer exist as deleted
@@ -3270,14 +3276,14 @@ DECLARE
 BEGIN
     RAISE NOTICE 'Starting field options update...';
 
-    FOR current_schema_name, current_table_name, current_column_name, check_clause IN 
+    FOR current_schema_name, current_table_name, current_column_name, check_clause IN
         SELECT DISTINCT
             table_schema,
             table_name,
             column_name,
             cc.check_clause
         FROM information_schema.check_constraints cc
-        JOIN information_schema.constraint_column_usage ccu 
+        JOIN information_schema.constraint_column_usage ccu
             ON cc.constraint_name = ccu.constraint_name
             AND cc.constraint_schema = ccu.constraint_schema
         WHERE table_schema LIKE 'mod_%'
@@ -3323,16 +3329,16 @@ BEGIN
             RAISE NOTICE 'Created JSON: %', option_json;
 
             -- First, try to insert if record doesn't exist
-            INSERT INTO mod_datalayer.fields 
+            INSERT INTO mod_datalayer.fields
                 (schema_name, table_name, field_name, input_options)
-            SELECT 
+            SELECT
                 current_schema_name,
                 current_table_name,
                 current_column_name,
                 option_json
             WHERE NOT EXISTS (
-                SELECT 1 
-                FROM mod_datalayer.fields 
+                SELECT 1
+                FROM mod_datalayer.fields
                 WHERE schema_name = current_schema_name
                 AND table_name = current_table_name
                 AND field_name = current_column_name
@@ -3340,7 +3346,7 @@ BEGIN
             RETURNING 1 INTO insert_count;
 
             IF insert_count > 0 THEN
-                RAISE NOTICE 'Inserted new field record for %.%.%', 
+                RAISE NOTICE 'Inserted new field record for %.%.%',
                     current_schema_name, current_table_name, current_column_name;
             ELSE
                 -- Update if input_options is null or empty array
@@ -3353,10 +3359,10 @@ BEGIN
                 RETURNING 1 INTO update_count;
 
                 IF update_count > 0 THEN
-                    RAISE NOTICE 'Updated existing field record for %.%.%', 
+                    RAISE NOTICE 'Updated existing field record for %.%.%',
                         current_schema_name, current_table_name, current_column_name;
                 ELSE
-                    RAISE NOTICE 'Record exists and has input_options set for %.%.%', 
+                    RAISE NOTICE 'Record exists and has input_options set for %.%.%',
                         current_schema_name, current_table_name, current_column_name;
                 END IF;
             END IF;
@@ -3411,7 +3417,7 @@ BEGIN
         NEW.created_by,
         NEW.created_by
     );
-    
+
     RETURN NEW;
 END;
 $$;
@@ -3942,7 +3948,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -3966,17 +3972,17 @@ DECLARE
 BEGIN
     -- Only process when status changes to 'completed'
     IF NEW.status = 'completed' AND (OLD.status IS NULL OR OLD.status != 'completed') THEN
-        
+
         -- Get the internal_sales_order_id and article_id from the completed work order
         v_internal_sales_order_id := NEW.internal_sales_order_id;
         v_article_id := NEW.article_id;
-        
+
         -- Skip if no internal_sales_order_id or article_id
         IF v_internal_sales_order_id IS NULL OR v_article_id IS NULL THEN
             RAISE NOTICE 'Work order % has no internal_sales_order_id or article_id, skipping internal manufacturing check', NEW.id;
             RETURN NEW;
         END IF;
-        
+
         -- Update the internal_sales_order_item to mark as manufactured
         UPDATE mod_base.internal_sales_order_items
         SET is_manufactured = true,
@@ -3984,18 +3990,18 @@ BEGIN
             updated_by = NEW.updated_by
         WHERE sales_order_id = v_internal_sales_order_id
           AND article_id = v_article_id;
-        
+
         -- Check if update was successful
         IF FOUND THEN
-            RAISE NOTICE 'Successfully marked internal sales order item as manufactured for article % in internal sales order %', 
+            RAISE NOTICE 'Successfully marked internal sales order item as manufactured for article % in internal sales order %',
                          v_article_id, v_internal_sales_order_id;
         ELSE
-            RAISE WARNING 'No internal sales order item found to mark as manufactured for article % in internal sales order %', 
+            RAISE WARNING 'No internal sales order item found to mark as manufactured for article % in internal sales order %',
                           v_article_id, v_internal_sales_order_id;
         END IF;
-        
+
     END IF;
-    
+
     RETURN NEW;
 END;
 $$;
@@ -4019,7 +4025,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -4045,7 +4051,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -4071,7 +4077,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -4162,17 +4168,17 @@ DECLARE
 BEGIN
     -- Only process when status changes to 'completed'
     IF NEW.status = 'completed' AND (OLD.status IS NULL OR OLD.status != 'completed') THEN
-        
+
         -- Get the sales_order_id and article_id from the completed work order
         v_sales_order_id := NEW.sales_order_id;
         v_article_id := NEW.article_id;
-        
+
         -- Skip if no sales_order_id or article_id
         IF v_sales_order_id IS NULL OR v_article_id IS NULL THEN
             RAISE NOTICE 'Work order % has no sales_order_id or article_id, skipping manufacturing check', NEW.id;
             RETURN NEW;
         END IF;
-        
+
         -- Update the sales_order_item to mark as manufactured
         UPDATE mod_base.sales_order_items
         SET is_manufactured = true,
@@ -4180,18 +4186,18 @@ BEGIN
             updated_by = NEW.updated_by
         WHERE sales_order_id = v_sales_order_id
           AND article_id = v_article_id;
-        
+
         -- Check if update was successful
         IF FOUND THEN
-            RAISE NOTICE 'Successfully marked sales order item as manufactured for article % in sales order %', 
+            RAISE NOTICE 'Successfully marked sales order item as manufactured for article % in sales order %',
                          v_article_id, v_sales_order_id;
         ELSE
-            RAISE WARNING 'No sales order item found to mark as manufactured for article % in sales order %', 
+            RAISE WARNING 'No sales order item found to mark as manufactured for article % in sales order %',
                           v_article_id, v_sales_order_id;
         END IF;
-        
+
     END IF;
-    
+
     RETURN NEW;
 END;
 $$;
@@ -4219,9 +4225,9 @@ BEGIN
         -- On UPDATE, set the user performing this operation and the updated timestamp
         NEW.updated_by := auth.uid();
         NEW.updated_at := now();
-        
+
         -- Update completed_at if status changed to a final state
-        IF OLD.overall_status != NEW.overall_status AND 
+        IF OLD.overall_status != NEW.overall_status AND
            NEW.overall_status IN ('PASSED', 'FAILED') AND
            NEW.completed_at IS NULL THEN
             NEW.completed_at := now();
@@ -4251,9 +4257,9 @@ DECLARE
 BEGIN
     -- Only process if status actually changed and is one of our target statuses
     IF OLD.status IS DISTINCT FROM NEW.status AND NEW.status IN ('in_progress', 'paused', 'completed') THEN
-        
+
         -- Get work order details for notification
-        SELECT 
+        SELECT
             wo.name,
             a.name as article_name,
             so.sales_order_number
@@ -4262,35 +4268,35 @@ BEGIN
         LEFT JOIN mod_base.articles a ON a.id = wo.article_id
         LEFT JOIN mod_base.sales_orders so ON so.id = wo.sales_order_id
         WHERE wo.id = NEW.id;
-        
+
         -- Set notification content based on status transition
         IF OLD.status = 'pending' AND NEW.status = 'in_progress' THEN
             v_notification_name := 'Lavoro Iniziato';
-            v_notification_description := 'L''Ordine di Lavoro "' || COALESCE(v_work_order_name, 'Sconosciuto') || 
-                '" per l''articolo "' || COALESCE(v_article_name, 'Sconosciuto') || 
+            v_notification_description := 'L''Ordine di Lavoro "' || COALESCE(v_work_order_name, 'Sconosciuto') ||
+                '" per l''articolo "' || COALESCE(v_article_name, 'Sconosciuto') ||
                 '" (ODV: ' || COALESCE(v_sales_order_number, 'Sconosciuto') || ') è stato avviato.';
         ELSIF OLD.status = 'in_progress' AND NEW.status = 'paused' THEN
             v_notification_name := 'Lavoro In Sospeso';
-            v_notification_description := 'L''Ordine di Lavoro "' || COALESCE(v_work_order_name, 'Sconosciuto') || 
-                '" per l''articolo "' || COALESCE(v_article_name, 'Sconosciuto') || 
+            v_notification_description := 'L''Ordine di Lavoro "' || COALESCE(v_work_order_name, 'Sconosciuto') ||
+                '" per l''articolo "' || COALESCE(v_article_name, 'Sconosciuto') ||
                 '" (ODV: ' || COALESCE(v_sales_order_number, 'Sconosciuto') || ') è stato messo in pausa.';
         ELSIF OLD.status = 'paused' AND NEW.status = 'in_progress' THEN
             v_notification_name := 'Lavoro Ripreso';
-            v_notification_description := 'L''Ordine di Lavoro "' || COALESCE(v_work_order_name, 'Sconosciuto') || 
-                '" per l''articolo "' || COALESCE(v_article_name, 'Sconosciuto') || 
+            v_notification_description := 'L''Ordine di Lavoro "' || COALESCE(v_work_order_name, 'Sconosciuto') ||
+                '" per l''articolo "' || COALESCE(v_article_name, 'Sconosciuto') ||
                 '" (ODV: ' || COALESCE(v_sales_order_number, 'Sconosciuto') || ') è stato ripreso.';
         ELSIF OLD.status = 'in_progress' AND NEW.status = 'completed' THEN
             v_notification_name := 'Lavoro Completato';
-            v_notification_description := 'L''Ordine di Lavoro "' || COALESCE(v_work_order_name, 'Sconosciuto') || 
-                '" per l''articolo "' || COALESCE(v_article_name, 'Sconosciuto') || 
+            v_notification_description := 'L''Ordine di Lavoro "' || COALESCE(v_work_order_name, 'Sconosciuto') ||
+                '" per l''articolo "' || COALESCE(v_article_name, 'Sconosciuto') ||
                 '" (ODV: ' || COALESCE(v_sales_order_number, 'Sconosciuto') || ') è stato completato.';
         END IF;
-        
+
         -- Generate unique notification code
         v_notification_code := 'WO_STATUS_' || NEW.status || '_' || NEW.id || '_' || extract(epoch from now())::text;
-        
+
         -- Loop through all employees in the Administration / Production Scheduling department
-        FOR v_employee_record IN 
+        FOR v_employee_record IN
             SELECT ed.employee_id
             FROM mod_base.employees_departments ed
             WHERE ed.department_id = v_department_id
@@ -4335,11 +4341,11 @@ BEGIN
                 v_department_id -- Target department: Administration / Production Scheduling
             );
         END LOOP;
-        
+
         RAISE NOTICE 'Work order status notifications created for work order % with status % - sent to all employees in Administration / Production Scheduling department', NEW.id, NEW.status;
-        
+
     END IF;
-    
+
     RETURN NEW;
 END;
 $$;
@@ -4363,7 +4369,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -4389,7 +4395,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -4415,7 +4421,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -4436,25 +4442,25 @@ CREATE OR REPLACE FUNCTION "mod_manufacturing"."update_article_loaded_for_all_wo
 BEGIN
   -- Only proceed if article_loaded is being set to TRUE
   IF NEW.article_loaded = TRUE AND (OLD.article_loaded IS NULL OR OLD.article_loaded = FALSE) THEN
-    
+
     -- Update all other work orders for the same sales_order_id and article_id
     -- to also have article_loaded = TRUE
-    UPDATE mod_manufacturing.work_orders 
-    SET 
+    UPDATE mod_manufacturing.work_orders
+    SET
       article_loaded = TRUE,
       updated_at = NOW()
-    WHERE 
-      sales_order_id = NEW.sales_order_id 
-      AND article_id = NEW.article_id 
+    WHERE
+      sales_order_id = NEW.sales_order_id
+      AND article_id = NEW.article_id
       AND id != NEW.id  -- Don't update the current work order (it's already updated)
       AND article_loaded = FALSE;  -- Only update if not already loaded
-    
+
     -- Log the update for debugging
-    RAISE NOTICE 'Updated article_loaded=TRUE for all work orders with sales_order_id=%, article_id=%', 
+    RAISE NOTICE 'Updated article_loaded=TRUE for all work orders with sales_order_id=%, article_id=%',
       NEW.sales_order_id, NEW.article_id;
-      
+
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -4469,25 +4475,25 @@ CREATE OR REPLACE FUNCTION "mod_manufacturing"."update_article_unloaded_for_all_
 BEGIN
   -- Only proceed if article_unloaded is being set to TRUE
   IF NEW.article_unloaded = TRUE AND (OLD.article_unloaded IS NULL OR OLD.article_unloaded = FALSE) THEN
-    
+
     -- Update all other work orders for the same sales_order_id and article_id
     -- to also have article_unloaded = TRUE
-    UPDATE mod_manufacturing.work_orders 
-    SET 
+    UPDATE mod_manufacturing.work_orders
+    SET
       article_unloaded = TRUE,
       updated_at = NOW()
-    WHERE 
-      sales_order_id = NEW.sales_order_id 
-      AND article_id = NEW.article_id 
+    WHERE
+      sales_order_id = NEW.sales_order_id
+      AND article_id = NEW.article_id
       AND id != NEW.id  -- Don't update the current work order (it's already updated)
       AND article_unloaded = FALSE;  -- Only update if not already unloaded
-    
+
     -- Log the update for debugging
-    RAISE NOTICE 'Updated article_unloaded=TRUE for all work orders with sales_order_id=%, article_id=%', 
+    RAISE NOTICE 'Updated article_unloaded=TRUE for all work orders with sales_order_id=%, article_id=%',
       NEW.sales_order_id, NEW.article_id;
-      
+
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -4520,14 +4526,14 @@ BEGIN
     WHERE sales_order_id = NEW.sales_order_id
       AND article_id = NEW.article_id
       AND is_deleted = false;
-    
+
     GET DIAGNOSTICS v_rows_updated = ROW_COUNT;
-    
+
     IF v_rows_updated > 0 THEN
-      RAISE NOTICE 'Updated production_date for % sales_order_items (sales_order_id: %, article_id: %)', 
+      RAISE NOTICE 'Updated production_date for % sales_order_items (sales_order_id: %, article_id: %)',
                    v_rows_updated, NEW.sales_order_id, NEW.article_id;
     ELSE
-      RAISE WARNING 'No sales_order_items found to update (sales_order_id: %, article_id: %)', 
+      RAISE WARNING 'No sales_order_items found to update (sales_order_id: %, article_id: %)',
                     NEW.sales_order_id, NEW.article_id;
     END IF;
   END IF;
@@ -4541,14 +4547,14 @@ BEGIN
     WHERE sales_order_id = NEW.internal_sales_order_id
       AND article_id = NEW.article_id
       AND is_deleted = false;
-    
+
     GET DIAGNOSTICS v_rows_updated = ROW_COUNT;
-    
+
     IF v_rows_updated > 0 THEN
-      RAISE NOTICE 'Updated production_date for % internal_sales_order_items (internal_sales_order_id: %, article_id: %)', 
+      RAISE NOTICE 'Updated production_date for % internal_sales_order_items (internal_sales_order_id: %, article_id: %)',
                    v_rows_updated, NEW.internal_sales_order_id, NEW.article_id;
     ELSE
-      RAISE WARNING 'No internal_sales_order_items found to update (internal_sales_order_id: %, article_id: %)', 
+      RAISE WARNING 'No internal_sales_order_items found to update (internal_sales_order_id: %, article_id: %)',
                     NEW.internal_sales_order_id, NEW.article_id;
     END IF;
   END IF;
@@ -4577,7 +4583,7 @@ DECLARE
 BEGIN
   -- Only process when status changes from 'pending' to 'in_progress'
   IF OLD.status = 'pending' AND NEW.status = 'in_progress' THEN
-    
+
     -- Handle regular sales orders only (internal_sales_orders don't have in_production field)
     IF NEW.sales_order_id IS NOT NULL THEN
       -- Only update if in_production is not already TRUE (avoid unnecessary updates)
@@ -4588,19 +4594,19 @@ BEGIN
       WHERE id = NEW.sales_order_id
         AND is_deleted = false
         AND in_production = false;  -- Only update if not already TRUE
-      
+
       GET DIAGNOSTICS v_rows_updated = ROW_COUNT;
-      
+
       IF v_rows_updated > 0 THEN
-        RAISE NOTICE 'Updated in_production to TRUE for sales_order_id: % (work_order_id: %)', 
+        RAISE NOTICE 'Updated in_production to TRUE for sales_order_id: % (work_order_id: %)',
                      NEW.sales_order_id, NEW.id;
       ELSIF v_rows_updated = 0 THEN
         -- This is normal if in_production was already TRUE, so we don't log a warning
-        RAISE NOTICE 'Sales order already has in_production = TRUE (sales_order_id: %, work_order_id: %)', 
+        RAISE NOTICE 'Sales order already has in_production = TRUE (sales_order_id: %, work_order_id: %)',
                      NEW.sales_order_id, NEW.id;
       END IF;
     END IF;
-    
+
     -- Note: Internal sales orders don't have in_production field, so we skip them
     -- They use is_production_complete instead, which is managed differently
   END IF;
@@ -4608,7 +4614,7 @@ BEGIN
   RETURN NEW;
 EXCEPTION WHEN OTHERS THEN
   -- Log error but don't fail the update
-  RAISE WARNING 'Error updating in_production on work order status change: % (work_order_id: %)', 
+  RAISE WARNING 'Error updating in_production on work order status change: % (work_order_id: %)',
                SQLERRM, NEW.id;
   RETURN NEW;
 END;
@@ -4631,11 +4637,11 @@ DECLARE
 BEGIN
     -- Only process when status changes to 'in_progress'
     IF NEW.status = 'in_progress' AND (OLD.status IS NULL OR OLD.status != 'in_progress') THEN
-        
+
         -- Get the sales_order_id and internal_sales_order_id from the work order
         v_sales_order_id := NEW.sales_order_id;
         v_internal_sales_order_id := NEW.internal_sales_order_id;
-        
+
         -- Update sales_order if it exists
         IF v_sales_order_id IS NOT NULL THEN
             UPDATE mod_base.sales_orders
@@ -4644,13 +4650,13 @@ BEGIN
                 updated_by = NEW.updated_by
             WHERE id = v_sales_order_id
               AND status != 'processing'; -- Only update if not already processing
-            
+
             IF FOUND THEN
-                RAISE NOTICE 'Successfully updated sales order % status to "processing" when work order % changed to "in_progress"', 
+                RAISE NOTICE 'Successfully updated sales order % status to "processing" when work order % changed to "in_progress"',
                              v_sales_order_id, NEW.id;
             END IF;
         END IF;
-        
+
         -- Update internal_sales_order if it exists
         IF v_internal_sales_order_id IS NOT NULL THEN
             UPDATE mod_base.internal_sales_orders
@@ -4659,20 +4665,20 @@ BEGIN
                 updated_by = NEW.updated_by
             WHERE id = v_internal_sales_order_id
               AND status != 'processing'; -- Only update if not already processing
-            
+
             IF FOUND THEN
-                RAISE NOTICE 'Successfully updated internal sales order % status to "processing" when work order % changed to "in_progress"', 
+                RAISE NOTICE 'Successfully updated internal sales order % status to "processing" when work order % changed to "in_progress"',
                              v_internal_sales_order_id, NEW.id;
             END IF;
         END IF;
-        
+
         -- Log if neither exists (should not happen based on constraint, but good to log)
         IF v_sales_order_id IS NULL AND v_internal_sales_order_id IS NULL THEN
             RAISE NOTICE 'Work order % changed to "in_progress" but has no associated sales_order_id or internal_sales_order_id', NEW.id;
         END IF;
-        
+
     END IF;
-    
+
     RETURN NEW;
 END;
 $$;
@@ -4777,7 +4783,7 @@ declare
 begin
   -- Extract object path from the file URL
   object_path := replace(file_url, rtrim(current_setting('supabase_storage.public_url'), '/') || '/chat_attachments/', '');
-  
+
   select
     into status, content
     result.status, result.content
@@ -4813,6 +4819,28 @@ $$;
 ALTER FUNCTION "mod_pulse"."delete_old_chat_attachment"() OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "mod_pulse"."fn_trigger_fcm_push"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  PERFORM
+    net.http_post(
+      url := 'https://hffdufdierbghwcnjswt.supabase.co/functions/v1/push',
+      headers := '{"Content-Type": "application/json"}'::jsonb,
+      body := jsonb_build_object(
+        'record', row_to_json(NEW)::jsonb,
+        'event', 'INSERT'
+      ),
+      timeout_milliseconds := 1000
+    );
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "mod_pulse"."fn_trigger_fcm_push"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "mod_pulse"."get_user_notifications"("p_limit" integer DEFAULT 50, "p_offset" integer DEFAULT 0, "p_is_read" boolean DEFAULT NULL::boolean) RETURNS TABLE("id" "uuid", "name" "text", "description" "text", "code" "text", "type" "text", "is_read" boolean, "avatar_url" "text", "barcode" "text", "created_at" timestamp with time zone, "updated_at" timestamp with time zone, "created_by" "uuid", "updated_by" "uuid", "pulse_id" "uuid", "total_count" bigint)
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -4822,22 +4850,22 @@ DECLARE
 BEGIN
   -- Get the current authenticated user ID
   current_user_id := auth.uid();
-  
+
   -- If no user is authenticated, return empty result
   IF current_user_id IS NULL THEN
     RETURN;
   END IF;
-  
+
   -- Get total count for pagination
   SELECT COUNT(*) INTO total_notifications
   FROM mod_pulse.notifications
   WHERE user_id = current_user_id
     AND is_deleted = false
     AND (p_is_read IS NULL OR is_read = p_is_read);
-  
+
   -- Return notifications with pagination
   RETURN QUERY
-  SELECT 
+  SELECT
     n.id,
     n.name,
     n.description,
@@ -4904,15 +4932,15 @@ BEGIN
   -- Create base notification name and description
   notification_name := 'New Task: ' || NEW.name;
   notification_description := 'A new task has been assigned: ' || NEW.name;
-  
+
   -- Add description if available
   IF NEW.description IS NOT NULL AND NEW.description != '' THEN
     notification_description := notification_description || ' - ' || NEW.description;
   END IF;
-  
+
   -- Add due date if available
   IF NEW.due_date IS NOT NULL THEN
-    notification_description := notification_description || ' (Due: ' || 
+    notification_description := notification_description || ' (Due: ' ||
       to_char(NEW.due_date, 'YYYY-MM-DD HH24:MI') || ')';
   END IF;
 
@@ -4920,9 +4948,9 @@ BEGIN
   IF NEW.assigned_id IS NOT NULL THEN
     -- Get assignee name for better notification context
     SELECT name INTO task_assignee_name
-    FROM mod_base.employees 
+    FROM mod_base.employees
     WHERE id = NEW.assigned_id;
-    
+
     -- Insert notification for the assigned user
     INSERT INTO mod_pulse.notifications (
       name,
@@ -4949,9 +4977,9 @@ BEGIN
   IF NEW.assigned_department_id IS NOT NULL THEN
     -- Get department name for better notification context
     SELECT name INTO task_department_name
-    FROM mod_base.departments 
+    FROM mod_base.departments
     WHERE id = NEW.assigned_department_id;
-    
+
     -- Insert notification for the department (using shared_with array)
     INSERT INTO mod_pulse.notifications (
       name,
@@ -4975,7 +5003,7 @@ BEGIN
       ARRAY[NEW.assigned_department_id::text] -- Share with the specific department
     );
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -4995,7 +5023,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -5021,7 +5049,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -5047,7 +5075,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -5073,7 +5101,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -5099,7 +5127,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -5125,7 +5153,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -5151,7 +5179,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -5177,7 +5205,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -5203,7 +5231,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -5250,32 +5278,32 @@ BEGIN
     -- Get names for better context
     IF OLD.assigned_id IS NOT NULL THEN
       SELECT name INTO old_assignee_name
-      FROM mod_base.employees 
+      FROM mod_base.employees
       WHERE id = OLD.assigned_id;
     END IF;
-    
+
     IF NEW.assigned_id IS NOT NULL THEN
       SELECT name INTO new_assignee_name
-      FROM mod_base.employees 
+      FROM mod_base.employees
       WHERE id = NEW.assigned_id;
     END IF;
-    
+
     -- Create notification for the new assignee (if not null)
     IF NEW.assigned_id IS NOT NULL THEN
       notification_name := 'Task Assigned: ' || NEW.name;
       notification_description := 'Task "' || NEW.name || '" has been assigned to you';
-      
+
       -- Add description if available
       IF NEW.description IS NOT NULL AND NEW.description != '' THEN
         notification_description := notification_description || ' - ' || NEW.description;
       END IF;
-      
+
       -- Add due date if available
       IF NEW.due_date IS NOT NULL THEN
-        notification_description := notification_description || ' (Due: ' || 
+        notification_description := notification_description || ' (Due: ' ||
           to_char(NEW.due_date, 'YYYY-MM-DD HH24:MI') || ')';
       END IF;
-      
+
       -- Insert notification for the new assignee
       INSERT INTO mod_pulse.notifications (
         name,
@@ -5297,12 +5325,12 @@ BEGIN
         NEW.pulse_id
       );
     END IF;
-    
+
     -- Create notification for the old assignee (if not null) - task was unassigned
     IF OLD.assigned_id IS NOT NULL AND NEW.assigned_id IS NULL THEN
       notification_name := 'Task Unassigned: ' || NEW.name;
       notification_description := 'Task "' || NEW.name || '" has been unassigned from you';
-      
+
       INSERT INTO mod_pulse.notifications (
         name,
         description,
@@ -5330,33 +5358,33 @@ BEGIN
     -- Get department names for better context
     IF OLD.assigned_department_id IS NOT NULL THEN
       SELECT name INTO old_department_name
-      FROM mod_base.departments 
+      FROM mod_base.departments
       WHERE id = OLD.assigned_department_id;
     END IF;
-    
+
     IF NEW.assigned_department_id IS NOT NULL THEN
       SELECT name INTO new_department_name
-      FROM mod_base.departments 
+      FROM mod_base.departments
       WHERE id = NEW.assigned_department_id;
     END IF;
-    
+
     -- Create notification for the new department (if not null)
     IF NEW.assigned_department_id IS NOT NULL THEN
       notification_name := 'Task Department Assignment: ' || NEW.name;
-      notification_description := 'Task "' || NEW.name || '" has been assigned to ' || 
+      notification_description := 'Task "' || NEW.name || '" has been assigned to ' ||
         COALESCE(new_department_name, 'your department');
-      
+
       -- Add description if available
       IF NEW.description IS NOT NULL AND NEW.description != '' THEN
         notification_description := notification_description || ' - ' || NEW.description;
       END IF;
-      
+
       -- Add due date if available
       IF NEW.due_date IS NOT NULL THEN
-        notification_description := notification_description || ' (Due: ' || 
+        notification_description := notification_description || ' (Due: ' ||
           to_char(NEW.due_date, 'YYYY-MM-DD HH24:MI') || ')';
       END IF;
-      
+
       -- Insert notification for the new department
       INSERT INTO mod_pulse.notifications (
         name,
@@ -5380,13 +5408,13 @@ BEGIN
         ARRAY[NEW.assigned_department_id::text] -- Share with the specific department
       );
     END IF;
-    
+
     -- Create notification for the old department (if not null) - task was unassigned from department
     IF OLD.assigned_department_id IS NOT NULL AND NEW.assigned_department_id IS NULL THEN
       notification_name := 'Task Department Unassignment: ' || NEW.name;
-      notification_description := 'Task "' || NEW.name || '" has been unassigned from ' || 
+      notification_description := 'Task "' || NEW.name || '" has been unassigned from ' ||
         COALESCE(old_department_name, 'your department');
-      
+
       INSERT INTO mod_pulse.notifications (
         name,
         description,
@@ -5410,7 +5438,7 @@ BEGIN
       );
     END IF;
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -5430,7 +5458,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -5454,12 +5482,12 @@ DECLARE
 BEGIN
   -- Get the current authenticated user ID
   current_user_id := auth.uid();
-  
+
   -- If no user is authenticated, return 0
   IF current_user_id IS NULL THEN
     RETURN 0;
   END IF;
-  
+
   -- Update all unread notifications as read
   UPDATE mod_pulse.notifications
   SET is_read = TRUE,
@@ -5468,10 +5496,10 @@ BEGIN
   WHERE user_id = current_user_id
     AND is_deleted = false
     AND is_read = FALSE;
-  
+
   -- Get the number of updated rows
   GET DIAGNOSTICS updated_rows = ROW_COUNT;
-  
+
   RETURN updated_rows;
 END;
 $$;
@@ -5489,12 +5517,12 @@ DECLARE
 BEGIN
   -- Get the current authenticated user ID
   current_user_id := auth.uid();
-  
+
   -- If no user is authenticated, return false
   IF current_user_id IS NULL THEN
     RETURN FALSE;
   END IF;
-  
+
   -- Update the notification as read
   UPDATE mod_pulse.notifications
   SET is_read = TRUE,
@@ -5503,10 +5531,10 @@ BEGIN
   WHERE id = p_notification_id
     AND user_id = current_user_id
     AND is_deleted = false;
-  
+
   -- Check if any rows were updated
   GET DIAGNOSTICS updated_rows = ROW_COUNT;
-  
+
   RETURN updated_rows > 0;
 END;
 $$;
@@ -5515,14 +5543,34 @@ $$;
 ALTER FUNCTION "mod_pulse"."mark_notification_as_read"("p_notification_id" "uuid") OWNER TO "postgres";
 
 
+CREATE OR REPLACE FUNCTION "mod_pulse"."send_fcm_notification"() RETURNS "trigger"
+    LANGUAGE "plpgsql"
+    AS $$
+BEGIN
+  PERFORM
+    net.http_post(
+      url := 'https://hffdufdierbghwcnjswt.supabase.co/functions/v1/push',
+      headers := '{"Content-Type": "application/json"}'::jsonb,
+      -- This sends the entire row data as the JSON body
+      body := jsonb_build_object('record', row_to_json(NEW)::jsonb),
+      timeout_milliseconds := 1000
+    );
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION "mod_pulse"."send_fcm_notification"() OWNER TO "postgres";
+
+
 CREATE OR REPLACE FUNCTION "mod_pulse"."update_pulse_status"() RETURNS "trigger"
     LANGUAGE "plpgsql"
     AS $$
 BEGIN
   -- Update the corresponding pulse record
   UPDATE mod_pulse.pulses
-  SET 
-    status = CASE 
+  SET
+    status = CASE
       WHEN NEW.status = 'pending' THEN 'open'
       WHEN NEW.status = 'processing' THEN 'in_progress'
       WHEN NEW.status = 'completed' THEN 'resolved'
@@ -5553,15 +5601,15 @@ DECLARE
     v_return_number text;
 BEGIN
     v_year := EXTRACT(YEAR FROM CURRENT_DATE)::text;
-    
+
     -- Get next sequence for this year
     SELECT COALESCE(MAX(CAST(SUBSTRING(return_number FROM 12) AS integer)), 0) + 1
     INTO v_sequence
     FROM mod_quality_control.supplier_returns
     WHERE return_number LIKE 'RET-' || v_year || '-%';
-    
+
     v_return_number := 'RET-' || v_year || '-' || LPAD(v_sequence::text, 4, '0');
-    
+
     RETURN v_return_number;
 END;
 $$;
@@ -5677,11 +5725,11 @@ CREATE OR REPLACE FUNCTION "mod_wms"."debug_relocation_movement"("p_article_id" 
     AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         l.name as location_name,
         COALESCE(b.batch_number, 'No Batch') as batch_number,
         i.quantity as current_quantity,
-        CASE 
+        CASE
             WHEN i.location_id = p_from_location_id THEN 'SOURCE'
             WHEN i.location_id = p_to_location_id THEN 'DESTINATION'
             ELSE 'OTHER'
@@ -5762,7 +5810,7 @@ DECLARE
     result json;
 BEGIN
     WITH historical_inventory AS (
-        SELECT 
+        SELECT
             i.article_id,
             i.quantity,
             sm.movement_date
@@ -5773,7 +5821,7 @@ BEGIN
     )
     SELECT json_build_object(
         'totalProducts', (
-            SELECT COUNT(DISTINCT article_id) 
+            SELECT COUNT(DISTINCT article_id)
             FROM mod_wms.inventory
         ),
         'availableStock', (
@@ -5868,7 +5916,7 @@ BEGIN
     BEGIN
         -- Archive the shipment by setting is_archived = TRUE
         UPDATE mod_wms.shipments
-        SET 
+        SET
             is_archived = TRUE,
             updated_at = NOW()
         WHERE id = NEW.id
@@ -5928,7 +5976,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -5955,7 +6003,7 @@ BEGIN
     -- Step 1: Mark receipt item as moved if receipt_item_id is provided
     IF NEW.receipt_item_id IS NOT NULL THEN
         UPDATE mod_wms.receipt_items
-        SET 
+        SET
             is_moved = TRUE,
             moved_date = NOW(),
             updated_at = NOW(),
@@ -6018,7 +6066,7 @@ BEGIN
             NEW.created_by,
             auth.uid()
         );
-    
+
     ELSIF TG_OP = 'UPDATE' THEN
         -- On UPDATE, set the user performing this operation and the updated timestamp
         NEW.updated_by := auth.uid();
@@ -6044,7 +6092,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -6125,7 +6173,7 @@ BEGIN
             NOW(),
             NOW()
         )
-        ON CONFLICT (article_id, location_id, batch_id) 
+        ON CONFLICT (article_id, location_id, batch_id)
         DO UPDATE SET
             quantity = inventory.quantity + NEW.quantity_moved,
             updated_at = NOW(),
@@ -6157,7 +6205,7 @@ BEGIN
             NOW(),
             NOW()
         )
-        ON CONFLICT (article_id, location_id, batch_id) 
+        ON CONFLICT (article_id, location_id, batch_id)
         DO UPDATE SET
             quantity = inventory.quantity + NEW.quantity_moved,
             updated_at = NOW(),
@@ -6187,7 +6235,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -6222,19 +6270,19 @@ BEGIN
         IF NEW.from_location_id IS NOT NULL AND NEW.article_id IS NOT NULL THEN
             -- Find the most recent movement that moved stock TO the current movement's FROM location
             -- Use COALESCE to prefer original_receipt_item_id (for recursive tracing) over receipt_item_id
-            SELECT 
+            SELECT
                 COALESCE(sm.original_receipt_item_id, sm.receipt_item_id) INTO found_receipt_item_id
             FROM mod_wms.stock_movements sm
             WHERE sm.to_location_id = NEW.from_location_id
               AND sm.article_id = NEW.article_id
               AND (
                   -- Match batch_id if both are specified, or both are NULL
-                  (sm.batch_id = NEW.batch_id) 
+                  (sm.batch_id = NEW.batch_id)
                   OR (sm.batch_id IS NULL AND NEW.batch_id IS NULL)
               )
               AND sm.is_deleted = false
               AND (
-                  sm.receipt_item_id IS NOT NULL 
+                  sm.receipt_item_id IS NOT NULL
                   OR sm.original_receipt_item_id IS NOT NULL
               )
             ORDER BY sm.movement_date DESC, sm.created_at DESC
@@ -6303,19 +6351,19 @@ BEGIN
             available_records TEXT;
         BEGIN
             SELECT string_agg(
-                format('Location: %s, Batch: %s, Qty: %s', 
-                    location_id, 
-                    COALESCE(batch_id::TEXT, 'NULL'), 
+                format('Location: %s, Batch: %s, Qty: %s',
+                    location_id,
+                    COALESCE(batch_id::TEXT, 'NULL'),
                     quantity
-                ), 
+                ),
                 '; '
             ) INTO available_records
             FROM mod_wms.inventory
             WHERE article_id = NEW.article_id;
-            
+
             error_message := format(
                 'No inventory record found for Article ID: %s, Location ID: %s, Batch ID: %s. Stock movement recorded but inventory not updated. Available inventory: %s',
-                NEW.article_id, NEW.from_location_id, COALESCE(NEW.batch_id::TEXT, 'NULL'), 
+                NEW.article_id, NEW.from_location_id, COALESCE(NEW.batch_id::TEXT, 'NULL'),
                 COALESCE(available_records, 'None')
             );
             -- Log warning instead of raising exception to allow stock movement to be recorded
@@ -6361,7 +6409,7 @@ BEGIN
         -- If destination record exists, add to it
         IF FOUND THEN
             new_destination_quantity := destination_inventory_record.quantity + NEW.quantity_moved;
-            
+
             UPDATE mod_wms.inventory
             SET quantity = new_destination_quantity,
                 updated_at = NOW(),
@@ -6509,7 +6557,7 @@ BEGIN
 
     -- Update the receipt item to set moved_date
     UPDATE mod_wms.receipt_items
-    SET 
+    SET
         moved_date = NOW(),
         updated_at = NOW(),
         updated_by = NEW.updated_by
@@ -6538,7 +6586,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -6595,19 +6643,19 @@ BEGIN
             available_records TEXT;
         BEGIN
             SELECT string_agg(
-                format('Location: %s, Batch: %s, Qty: %s', 
-                    location_id, 
-                    COALESCE(batch_id::TEXT, 'NULL'), 
+                format('Location: %s, Batch: %s, Qty: %s',
+                    location_id,
+                    COALESCE(batch_id::TEXT, 'NULL'),
                     quantity
-                ), 
+                ),
                 '; '
             ) INTO available_records
             FROM mod_wms.inventory
             WHERE article_id = NEW.article_id;
-            
+
             error_message := format(
                 'No inventory record found for Article ID: %s, Source Location ID: %s, Batch ID: %s. Cannot relocate quantity. Available inventory: %s',
-                NEW.article_id, NEW.from_location_id, COALESCE(target_batch_id::TEXT, 'NULL'), 
+                NEW.article_id, NEW.from_location_id, COALESCE(target_batch_id::TEXT, 'NULL'),
                 COALESCE(available_records, 'None')
             );
             RAISE EXCEPTION '%', error_message;
@@ -6647,26 +6695,26 @@ BEGIN
     ELSE
         -- If no existing inventory at target location, create new record
         INSERT INTO mod_wms.inventory (
-            article_id, 
-            location_id, 
-            batch_id, 
-            quantity, 
-            allocated_qty, 
-            domain_id, 
-            created_by, 
-            updated_by, 
-            created_at, 
+            article_id,
+            location_id,
+            batch_id,
+            quantity,
+            allocated_qty,
+            domain_id,
+            created_by,
+            updated_by,
+            created_at,
             updated_at
         ) VALUES (
-            NEW.article_id, 
-            NEW.to_location_id, 
-            target_batch_id, 
-            NEW.quantity_moved, 
-            0, 
-            NEW.domain_id, 
-            NEW.created_by, 
-            NEW.updated_by, 
-            NOW(), 
+            NEW.article_id,
+            NEW.to_location_id,
+            target_batch_id,
+            NEW.quantity_moved,
+            0,
+            NEW.domain_id,
+            NEW.created_by,
+            NEW.updated_by,
+            NOW(),
             NOW()
         );
     END IF;
@@ -6694,7 +6742,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -6720,7 +6768,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -6749,8 +6797,8 @@ BEGIN
     -- Wrap entire logic in error handling to prevent transaction rollback
     BEGIN
         -- Loop through all shipment_items for this shipment
-        FOR v_item IN 
-            SELECT 
+        FOR v_item IN
+            SELECT
                 id,
                 article_id,
                 batch_id,
@@ -6796,7 +6844,7 @@ BEGIN
             EXCEPTION WHEN OTHERS THEN
                 -- Log error for this specific item but continue processing other items
                 -- This allows shipment status update to succeed even if stock movement creation fails
-                RAISE WARNING 'Error creating outbound stock movement for shipment_item % (article_id: %, location_id: %): %', 
+                RAISE WARNING 'Error creating outbound stock movement for shipment_item % (article_id: %, location_id: %): %',
                     v_item.id, v_item.article_id, v_item.location_id, SQLERRM;
             END;
         END LOOP;
@@ -6831,7 +6879,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -7028,8 +7076,8 @@ BEGIN
         END IF;
 
         -- Loop through all shipment_items for this shipment
-        FOR v_shipment_item IN 
-            SELECT 
+        FOR v_shipment_item IN
+            SELECT
                 article_id
             FROM mod_wms.shipment_items
             WHERE shipment_id = NEW.id
@@ -7041,7 +7089,7 @@ BEGIN
                 -- - article_id matches the shipment_item's article_id
                 -- - is_deleted = false
                 UPDATE mod_base.sales_order_items
-                SET 
+                SET
                     is_shipped = TRUE,
                     updated_at = NOW()
                 WHERE sales_order_id = ANY(v_sales_order_ids)
@@ -7050,7 +7098,7 @@ BEGIN
                   AND is_shipped = FALSE; -- Only update if not already set to avoid unnecessary updates
             EXCEPTION WHEN OTHERS THEN
                 -- Log error for this specific item but continue processing other items
-                RAISE WARNING 'Error updating is_shipped for sales_order_item (article_id: %, sales_order_ids: %): %', 
+                RAISE WARNING 'Error updating is_shipped for sales_order_item (article_id: %, sales_order_ids: %): %',
                     v_shipment_item.article_id, v_sales_order_ids, SQLERRM;
             END;
         END LOOP;
@@ -7085,7 +7133,7 @@ begin
       new.created_by,
       auth.uid()
     );
-  
+
   elsif TG_OP = 'UPDATE' then
     -- On UPDATE, set the user performing this operation and the updated timestamp
     new.updated_by := auth.uid();
@@ -7113,7 +7161,7 @@ DECLARE
 BEGIN
   -- Initialize discrepancy_message
   discrepancy_message := '';
-  
+
   -- Check if we need to send a notification
   -- Condition 1: quantity_received is different from quantity_ordered
   IF NEW.quantity_received IS DISTINCT FROM NEW.quantity_ordered THEN
@@ -7124,7 +7172,7 @@ BEGIN
       discrepancy_message := 'Quantità ricevuta (' || NEW.quantity_received::text || ') superiore alla quantità ordinata (' || NEW.quantity_ordered::text || ')';
     END IF;
   END IF;
-  
+
   -- Condition 2: quantity_damaged is greater than 0
   IF COALESCE(NEW.quantity_damaged, 0) > 0 THEN
     should_notify := TRUE;
@@ -7134,25 +7182,25 @@ BEGIN
       discrepancy_message := NEW.quantity_damaged::text || ' articoli danneggiati';
     END IF;
   END IF;
-  
+
   -- Only proceed if we need to send a notification
   IF should_notify THEN
     -- Get the receipt name for context
     SELECT r.name INTO receipt_name
     FROM mod_wms.receipts r
     WHERE r.id = NEW.receipt_id;
-    
+
     -- Get the article name for context
-    SELECT a.name INTO article_name 
+    SELECT a.name INTO article_name
     FROM mod_base.articles a
     WHERE a.id = NEW.article_id;
-    
+
     -- Create notification name and description
     notification_name := 'Discrepanza Ricevimento: ' || COALESCE(article_name, NEW.name);
-    notification_description := 'Nel ricevimento "' || COALESCE(receipt_name, 'Ricevimento Sconosciuto') || 
-                                '" - Articolo "' || COALESCE(article_name, NEW.name) || 
+    notification_description := 'Nel ricevimento "' || COALESCE(receipt_name, 'Ricevimento Sconosciuto') ||
+                                '" - Articolo "' || COALESCE(article_name, NEW.name) ||
                                 '" - ' || discrepancy_message;
-    
+
     -- Insert notification for Serena
     INSERT INTO mod_pulse.notifications (
       name,
@@ -7172,7 +7220,7 @@ BEGIN
       NULL -- department_id - can be set later if needed
     );
   END IF;
-  
+
   RETURN NEW;
 END;
 $$;
@@ -7282,7 +7330,7 @@ BEGIN
         -- - article_id matches the shipment_item's article_id
         -- - is_deleted = false
         UPDATE mod_base.sales_order_items
-        SET 
+        SET
           has_shipment = TRUE,
           updated_at = NOW()
         WHERE sales_order_id = ANY(sales_order_ids)
@@ -7291,15 +7339,15 @@ BEGIN
           AND has_shipment = false; -- Only update if not already set to avoid unnecessary updates;
 
         IF FOUND THEN
-          RAISE NOTICE 'Updated has_shipment = TRUE for sales_order_items with sales_order_id IN % AND article_id = %', 
+          RAISE NOTICE 'Updated has_shipment = TRUE for sales_order_items with sales_order_id IN % AND article_id = %',
                        sales_order_ids, shipment_item_record.article_id;
         ELSE
-          RAISE NOTICE 'No matching sales_order_items found for sales_order_id IN % AND article_id = %', 
+          RAISE NOTICE 'No matching sales_order_items found for sales_order_id IN % AND article_id = %',
                        sales_order_ids, shipment_item_record.article_id;
         END IF;
       EXCEPTION WHEN OTHERS THEN
         -- Log error for this specific item but continue processing other items
-        RAISE WARNING 'Error updating has_shipment for sales_order_item (article_id: %, sales_order_ids: %): %', 
+        RAISE WARNING 'Error updating has_shipment for sales_order_item (article_id: %, sales_order_ids: %): %',
             shipment_item_record.article_id, sales_order_ids, SQLERRM;
       END;
     END LOOP;
@@ -7679,13 +7727,13 @@ CREATE OR REPLACE FUNCTION "public"."check_user_sales_orders_access"() RETURNS T
     AS $$
 BEGIN
   RETURN QUERY
-  SELECT 
+  SELECT
     auth.uid() as user_id,
     du.domain_id,
     du.role,
     get_my_claim_text('domain_id') as jwt_domain_id,
     get_my_claim_text('role') as jwt_role,
-    CASE 
+    CASE
       WHEN du.user_id IS NOT NULL THEN true
       WHEN get_my_claim_text('role') = 'superAdmin' THEN true
       ELSE false
@@ -7693,13 +7741,13 @@ BEGIN
   FROM mod_admin.domain_users du
   WHERE du.user_id = auth.uid()
   UNION ALL
-  SELECT 
+  SELECT
     auth.uid() as user_id,
     NULL::uuid as domain_id,
     NULL::text as role,
     get_my_claim_text('domain_id') as jwt_domain_id,
     get_my_claim_text('role') as jwt_role,
-    CASE 
+    CASE
       WHEN get_my_claim_text('role') = 'superAdmin' THEN true
       ELSE false
     END as can_access_sales_orders
@@ -7720,8 +7768,8 @@ CREATE OR REPLACE FUNCTION "public"."delete_claim"("uid" "uuid", "claim" "text")
     BEGIN
       IF NOT is_claims_admin() THEN
           RETURN 'error: access denied';
-      ELSE        
-        update auth.users set raw_app_meta_data = 
+      ELSE
+        update auth.users set raw_app_meta_data =
           raw_app_meta_data - claim where id = uid;
         return 'OK';
       END IF;
@@ -7828,7 +7876,7 @@ CREATE OR REPLACE FUNCTION "public"."get_employees_with_details"() RETURNS TABLE
     AS $$
 BEGIN
   RETURN QUERY
-  SELECT 
+  SELECT
     e.id,
     e.name::varchar,
     e.last_name::varchar,
@@ -7836,7 +7884,7 @@ BEGIN
     COALESCE(u.email, 'No email')::varchar as email,
     COALESCE(e.phone, 'No phone')::varchar as phone,
     COALESCE(
-      ARRAY_AGG(d.name::varchar) FILTER (WHERE d.name IS NOT NULL), 
+      ARRAY_AGG(d.name::varchar) FILTER (WHERE d.name IS NOT NULL),
       ARRAY[]::varchar[]
     ) as department_names
   FROM mod_base.employees e
@@ -7872,7 +7920,7 @@ ALTER FUNCTION "public"."get_jwt_claim_domain_id"() OWNER TO "postgres";
 CREATE OR REPLACE FUNCTION "public"."get_my_claim"("claim" "text") RETURNS "jsonb"
     LANGUAGE "sql" STABLE
     AS $$
-  select 
+  select
   	coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb -> 'app_metadata' -> claim, null)
 $$;
 
@@ -7883,7 +7931,7 @@ ALTER FUNCTION "public"."get_my_claim"("claim" "text") OWNER TO "postgres";
 CREATE OR REPLACE FUNCTION "public"."get_my_claim_text"("claim" "text") RETURNS "text"
     LANGUAGE "sql" STABLE
     AS $$
-  SELECT 
+  SELECT
     trim(both '\"' from coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb -> 'app_metadata' -> claim, null)::text)
 $$;
 
@@ -7894,7 +7942,7 @@ ALTER FUNCTION "public"."get_my_claim_text"("claim" "text") OWNER TO "postgres";
 CREATE OR REPLACE FUNCTION "public"."get_my_claims"() RETURNS "jsonb"
     LANGUAGE "sql" STABLE
     AS $$
-  select 
+  select
   	coalesce(nullif(current_setting('request.jwt.claims', true), '')::jsonb -> 'app_metadata', '{}'::jsonb)::jsonb
 $$;
 
@@ -7956,22 +8004,22 @@ DECLARE
 BEGIN
   -- Get the current authenticated user ID
   current_user_id := auth.uid();
-  
+
   -- If no user is authenticated, return empty result
   IF current_user_id IS NULL THEN
     RETURN;
   END IF;
-  
+
   -- Get total count for pagination
   SELECT COUNT(*) INTO total_notifications
   FROM mod_pulse.notifications
   WHERE user_id = current_user_id
     AND is_deleted = false
     AND (p_is_read IS NULL OR is_read = p_is_read);
-  
+
   -- Return notifications with pagination
   RETURN QUERY
-  SELECT 
+  SELECT
     n.id,
     n.name,
     n.description,
@@ -8005,16 +8053,16 @@ CREATE OR REPLACE FUNCTION "public"."get_user_page_access"("user_department_ids"
     AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         p.id as page_id,
         p.name as page_name,
         p.path as page_path,
         p.title as page_title,
-        CASE 
-            WHEN pd.page_id IS NOT NULL THEN true 
-            ELSE false 
+        CASE
+            WHEN pd.page_id IS NOT NULL THEN true
+            ELSE false
         END as is_restricted,
-        CASE 
+        CASE
             WHEN pd.page_id IS NOT NULL AND pd.department_id = ANY(user_department_ids) THEN true
             WHEN pd.page_id IS NULL THEN true  -- Unrestricted pages are accessible
             ELSE false
@@ -8085,7 +8133,7 @@ CREATE OR REPLACE FUNCTION "public"."is_claims_admin"() RETURNS boolean
         return false; -- user does NOT have claims_admin set to true
       END IF;
       --------------------------------------------
-      -- End of block 
+      -- End of block
       --------------------------------------------
     ELSE -- not a user session, probably being called from a trigger or something
       return true;
@@ -8106,12 +8154,12 @@ DECLARE
 BEGIN
   -- Get the current authenticated user ID
   current_user_id := auth.uid();
-  
+
   -- If no user is authenticated, return 0
   IF current_user_id IS NULL THEN
     RETURN 0;
   END IF;
-  
+
   -- Update all unread notifications as read
   UPDATE mod_pulse.notifications
   SET is_read = TRUE,
@@ -8120,10 +8168,10 @@ BEGIN
   WHERE user_id = current_user_id
     AND is_deleted = false
     AND is_read = FALSE;
-  
+
   -- Get the number of updated rows
   GET DIAGNOSTICS updated_rows = ROW_COUNT;
-  
+
   RETURN updated_rows;
 END;
 $$;
@@ -8141,12 +8189,12 @@ DECLARE
 BEGIN
   -- Get the current authenticated user ID
   current_user_id := auth.uid();
-  
+
   -- If no user is authenticated, return false
   IF current_user_id IS NULL THEN
     RETURN FALSE;
   END IF;
-  
+
   -- Update the notification as read
   UPDATE mod_pulse.notifications
   SET is_read = TRUE,
@@ -8155,10 +8203,10 @@ BEGIN
   WHERE id = p_notification_id
     AND user_id = current_user_id
     AND is_deleted = false;
-  
+
   -- Check if any rows were updated
   GET DIAGNOSTICS updated_rows = ROW_COUNT;
-  
+
   RETURN updated_rows > 0;
 END;
 $$;
@@ -8299,9 +8347,9 @@ CREATE OR REPLACE FUNCTION "public"."set_claim"("uid" "uuid", "claim" "text", "v
     BEGIN
       IF NOT is_claims_admin() THEN
           RETURN 'error: access denied';
-      ELSE        
-        update auth.users set raw_app_meta_data = 
-          raw_app_meta_data || 
+      ELSE
+        update auth.users set raw_app_meta_data =
+          raw_app_meta_data ||
             json_build_object(claim, value)::jsonb where id = uid;
         return 'OK';
       END IF;
@@ -8778,22 +8826,22 @@ BEGIN
     IF (TG_OP = 'UPDATE' AND OLD.production_date = NEW.production_date) THEN
         RETURN NEW;
     END IF;
-    
+
     -- Skip if production_date is being set to NULL
     IF (TG_OP = 'UPDATE' AND NEW.production_date IS NULL) THEN
         RETURN NEW;
     END IF;
-    
+
     -- Skip if production_date is NULL in INSERT
     IF (TG_OP = 'INSERT' AND NEW.production_date IS NULL) THEN
         RETURN NEW;
     END IF;
-    
+
     -- Get the current expected_delivery_date from sales_orders
     SELECT expected_delivery_date INTO current_expected_date
     FROM mod_base.sales_orders
     WHERE id = NEW.sales_order_id;
-    
+
     -- Find the latest production_date among all items in this sales_order
     -- that have a production_date set
     SELECT MAX(production_date) INTO latest_production_date
@@ -8801,7 +8849,7 @@ BEGIN
     WHERE sales_order_id = NEW.sales_order_id
       AND production_date IS NOT NULL
       AND is_deleted = false;
-    
+
     -- Only update if we found a valid production_date
     IF latest_production_date IS NOT NULL THEN
         -- If there's no current expected_delivery_date, set it to the latest production_date
@@ -8816,18 +8864,18 @@ BEGIN
                 RETURN NEW;
             END IF;
         END IF;
-        
+
         -- Update the sales_order with the new expected_delivery_date
         UPDATE mod_base.sales_orders
         SET expected_delivery_date = new_expected_date,
             updated_at = NOW()
         WHERE id = NEW.sales_order_id;
-        
+
         -- Log the update for debugging (optional)
-        RAISE NOTICE 'Updated expected_delivery_date for sales_order % from % to %', 
+        RAISE NOTICE 'Updated expected_delivery_date for sales_order % from % to %',
             NEW.sales_order_id, current_expected_date, new_expected_date;
     END IF;
-    
+
     RETURN NEW;
 END;
 $$;
@@ -9070,7 +9118,7 @@ CREATE TABLE IF NOT EXISTS "mod_base"."announcements" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "created_by" "uuid",
     "updated_by" "uuid",
-    "testing_column" "text"
+    "testing" "text"
 );
 
 
@@ -10420,9 +10468,9 @@ COMMENT ON COLUMN "mod_base"."sales_order_items"."is_manufactured" IS 'Indicates
 
 
 
-COMMENT ON COLUMN "mod_base"."sales_order_items"."serial_number" IS 'Comma-separated serial numbers for manufactured items. Format: PREFIX[YY][incremental_nr]. 
+COMMENT ON COLUMN "mod_base"."sales_order_items"."serial_number" IS 'Comma-separated serial numbers for manufactured items. Format: PREFIX[YY][incremental_nr].
 Example: "SP25000001" for single item, "SP25000001,SP25000002" for quantity_ordered = 2.
-Only populated for items in specific categories (Serbatoi, Scambiatori di calore SRS, Preparators, Coibentazioni, Bollitori) 
+Only populated for items in specific categories (Serbatoi, Scambiatori di calore SRS, Preparators, Coibentazioni, Bollitori)
 or articles with type = "heat_exchanger".';
 
 
@@ -12342,7 +12390,7 @@ CREATE TABLE IF NOT EXISTS "mod_wms"."inventory" (
 ALTER TABLE "mod_wms"."inventory" OWNER TO "postgres";
 
 
-COMMENT ON TABLE "mod_wms"."inventory" IS 'Current inventory levels. Supports multiple batches per article+location combination. 
+COMMENT ON TABLE "mod_wms"."inventory" IS 'Current inventory levels. Supports multiple batches per article+location combination.
 Each record represents inventory for a specific article, location, and batch combination.
 When batch_id is NULL, it represents non-batched inventory for that article+location.';
 
@@ -15317,7 +15365,7 @@ CREATE OR REPLACE TRIGGER "trigger_generate_serial_number_for_sales_order_item" 
 
 
 
-COMMENT ON TRIGGER "trigger_generate_serial_number_for_sales_order_item" ON "mod_base"."sales_order_items" IS 'Trigger that automatically generates serial numbers for qualifying sales order items after insertion. 
+COMMENT ON TRIGGER "trigger_generate_serial_number_for_sales_order_item" ON "mod_base"."sales_order_items" IS 'Trigger that automatically generates serial numbers for qualifying sales order items after insertion.
 Handles concurrent inserts safely using row-level locking.';
 
 
@@ -21541,6 +21589,12 @@ GRANT ALL ON FUNCTION "mod_pulse"."delete_old_chat_attachment"() TO "service_rol
 
 
 
+GRANT ALL ON FUNCTION "mod_pulse"."fn_trigger_fcm_push"() TO "anon";
+GRANT ALL ON FUNCTION "mod_pulse"."fn_trigger_fcm_push"() TO "authenticated";
+GRANT ALL ON FUNCTION "mod_pulse"."fn_trigger_fcm_push"() TO "service_role";
+
+
+
 GRANT ALL ON FUNCTION "mod_pulse"."get_user_notifications"("p_limit" integer, "p_offset" integer, "p_is_read" boolean) TO "anon";
 GRANT ALL ON FUNCTION "mod_pulse"."get_user_notifications"("p_limit" integer, "p_offset" integer, "p_is_read" boolean) TO "authenticated";
 GRANT ALL ON FUNCTION "mod_pulse"."get_user_notifications"("p_limit" integer, "p_offset" integer, "p_is_read" boolean) TO "service_role";
@@ -21640,6 +21694,12 @@ GRANT ALL ON FUNCTION "mod_pulse"."mark_all_notifications_as_read"() TO "service
 GRANT ALL ON FUNCTION "mod_pulse"."mark_notification_as_read"("p_notification_id" "uuid") TO "anon";
 GRANT ALL ON FUNCTION "mod_pulse"."mark_notification_as_read"("p_notification_id" "uuid") TO "authenticated";
 GRANT ALL ON FUNCTION "mod_pulse"."mark_notification_as_read"("p_notification_id" "uuid") TO "service_role";
+
+
+
+GRANT ALL ON FUNCTION "mod_pulse"."send_fcm_notification"() TO "anon";
+GRANT ALL ON FUNCTION "mod_pulse"."send_fcm_notification"() TO "authenticated";
+GRANT ALL ON FUNCTION "mod_pulse"."send_fcm_notification"() TO "service_role";
 
 
 
@@ -23114,2523 +23174,6 @@ ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" GRANT ALL ON TAB
 
 
 
-
-drop trigger if exists "trigger_update_expected_delivery_date_internal" on "mod_base"."internal_sales_order_items";
-
-drop trigger if exists "trigger_update_expected_delivery_date" on "mod_base"."sales_order_items";
-
-drop trigger if exists "trigger_update_receipt_supplier" on "mod_wms"."receipts";
-
-drop policy "superAdmin can delete" on "mod_admin"."domain_modules";
-
-drop policy "superAdmin can insert into" on "mod_admin"."domain_modules";
-
-drop policy "superAdmin can update" on "mod_admin"."domain_modules";
-
-drop policy "Admins can delete from domain_users" on "mod_admin"."domain_users";
-
-drop policy "Admins can insert into domain_users" on "mod_admin"."domain_users";
-
-drop policy "Admins can update domain_users" on "mod_admin"."domain_users";
-
-drop policy "Admins can delete from domains" on "mod_admin"."domains";
-
-drop policy "Admins can insert into domains" on "mod_admin"."domains";
-
-drop policy "Admins can update domains" on "mod_admin"."domains";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."announcements";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."announcements";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."announcements";
-
-drop policy "Users can see their own domain data" on "mod_base"."announcements";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."article_categories";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."article_categories";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."article_categories";
-
-drop policy "Users can see their own domain data" on "mod_base"."article_categories";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."customer_addresses";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."customer_addresses";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."customer_addresses";
-
-drop policy "Users can delete their own domain data" on "mod_base"."customer_addresses";
-
-drop policy "Users can insert addresses in their domain" on "mod_base"."customer_addresses";
-
-drop policy "Users can see their own domain data" on "mod_base"."customer_addresses";
-
-drop policy "Users can update addresses in their domain" on "mod_base"."customer_addresses";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."customers";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."customers";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."customers";
-
-drop policy "Users can insert customers in their domain" on "mod_base"."customers";
-
-drop policy "Users can see their own domain data" on "mod_base"."customers";
-
-drop policy "Users can update customers in their domain" on "mod_base"."customers";
-
-drop policy "Users can view customers in their domain" on "mod_base"."customers";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."departments";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."departments";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."departments";
-
-drop policy "Users can see their own domain data" on "mod_base"."departments";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."employees";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."employees";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."employees";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."employees_departments";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."employees_departments";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."employees_departments";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."purchase_order_items";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."purchase_order_items";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."purchase_order_items";
-
-drop policy "Users can see their own domain data" on "mod_base"."purchase_order_items";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."purchase_orders";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."purchase_orders";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."purchase_orders";
-
-drop policy "Users can see their own domain data" on "mod_base"."purchase_orders";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."report_template";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."report_template";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."report_template";
-
-drop policy "Users can see their own domain data" on "mod_base"."report_template";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."suppliers";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."suppliers";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."suppliers";
-
-drop policy "Users can see their own domain data" on "mod_base"."suppliers";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_base"."units_of_measure";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_base"."units_of_measure";
-
-drop policy "SuperAdmins can see all data" on "mod_base"."units_of_measure";
-
-drop policy "Users can see their own domain data" on "mod_base"."units_of_measure";
-
-drop policy "superAdmin can delete" on "mod_datalayer"."fields";
-
-drop policy "superAdmin can insert into" on "mod_datalayer"."fields";
-
-drop policy "superAdmin can update" on "mod_datalayer"."fields";
-
-drop policy "superAdmin can delete" on "mod_datalayer"."main_menu";
-
-drop policy "superAdmin can insert into" on "mod_datalayer"."main_menu";
-
-drop policy "superAdmin can update" on "mod_datalayer"."main_menu";
-
-drop policy "superAdmin can delete" on "mod_datalayer"."modules";
-
-drop policy "superAdmin can insert into" on "mod_datalayer"."modules";
-
-drop policy "superAdmin can update" on "mod_datalayer"."modules";
-
-drop policy "superAdmin can delete" on "mod_datalayer"."page_categories";
-
-drop policy "superAdmin can insert into" on "mod_datalayer"."page_categories";
-
-drop policy "superAdmin can update" on "mod_datalayer"."page_categories";
-
-drop policy "superAdmin can delete" on "mod_datalayer"."pages";
-
-drop policy "superAdmin can insert into" on "mod_datalayer"."pages";
-
-drop policy "superAdmin can update" on "mod_datalayer"."pages";
-
-drop policy "SuperAdmins can manage all data" on "mod_datalayer"."pages_departments";
-
-drop policy "Users can see their own domain data" on "mod_datalayer"."pages_departments";
-
-drop policy "superAdmin can delete" on "mod_datalayer"."tables";
-
-drop policy "superAdmin can insert into" on "mod_datalayer"."tables";
-
-drop policy "superAdmin can update" on "mod_datalayer"."tables";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_manufacturing"."departments";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_manufacturing"."departments";
-
-drop policy "SuperAdmins can see all data" on "mod_manufacturing"."departments";
-
-drop policy "Users can see their own domain data" on "mod_manufacturing"."departments";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_manufacturing"."locations";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_manufacturing"."locations";
-
-drop policy "SuperAdmins can see all data" on "mod_manufacturing"."locations";
-
-drop policy "Users can see their own domain data" on "mod_manufacturing"."locations";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_manufacturing"."production_logs";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_manufacturing"."production_logs";
-
-drop policy "SuperAdmins can see all data" on "mod_manufacturing"."production_logs";
-
-drop policy "Users can see their own domain data" on "mod_manufacturing"."production_logs";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_manufacturing"."recipes";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_manufacturing"."recipes";
-
-drop policy "SuperAdmins can see all data" on "mod_manufacturing"."recipes";
-
-drop policy "Users can see their own domain data" on "mod_manufacturing"."recipes";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_manufacturing"."scheduled_items";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_manufacturing"."scheduled_items";
-
-drop policy "Authenticated users can insert data" on "mod_manufacturing"."scheduled_items";
-
-drop policy "Authenticated users can update data" on "mod_manufacturing"."scheduled_items";
-
-drop policy "SuperAdmins can see all data" on "mod_manufacturing"."scheduled_items";
-
-drop policy "Users can see their own domain data" on "mod_manufacturing"."scheduled_items";
-
-drop policy "Administrators can see domain work cycles" on "mod_manufacturing"."work_cycles";
-
-drop policy "SuperAdmins can see all work cycles" on "mod_manufacturing"."work_cycles";
-
-drop policy "Users can see department shared work cycles" on "mod_manufacturing"."work_cycles";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_manufacturing"."work_order_quality_summary";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_manufacturing"."work_order_quality_summary";
-
-drop policy "Authenticated users can delete data" on "mod_manufacturing"."work_order_quality_summary";
-
-drop policy "Authenticated users can insert data" on "mod_manufacturing"."work_order_quality_summary";
-
-drop policy "Authenticated users can update data" on "mod_manufacturing"."work_order_quality_summary";
-
-drop policy "SuperAdmins can see all data" on "mod_manufacturing"."work_order_quality_summary";
-
-drop policy "Users can see their own domain data" on "mod_manufacturing"."work_order_quality_summary";
-
-drop policy "Administrators can see domain work orders" on "mod_manufacturing"."work_orders";
-
-drop policy "Authenticated users can see domain work orders" on "mod_manufacturing"."work_orders";
-
-drop policy "SuperAdmins can see all work orders" on "mod_manufacturing"."work_orders";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_manufacturing"."work_steps";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_manufacturing"."work_steps";
-
-drop policy "SuperAdmins can see all data" on "mod_manufacturing"."work_steps";
-
-drop policy "Users can see their own domain data" on "mod_manufacturing"."work_steps";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_manufacturing"."workstations";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_manufacturing"."workstations";
-
-drop policy "SuperAdmins can see all data" on "mod_manufacturing"."workstations";
-
-drop policy "Users can see their own domain data" on "mod_manufacturing"."workstations";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_pulse"."department_notification_configs";
-
-drop policy "SuperAdmins can see all data" on "mod_pulse"."department_notification_configs";
-
-drop policy "Users can see their own domain data" on "mod_pulse"."department_notification_configs";
-
-drop policy "Administrators can see domain notifications" on "mod_pulse"."notifications";
-
-drop policy "SuperAdmins can see all notifications" on "mod_pulse"."notifications";
-
-drop policy "Users can see department shared notifications" on "mod_pulse"."notifications";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_pulse"."pulse_chat";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_pulse"."pulse_chat";
-
-drop policy "SuperAdmins can see all data" on "mod_pulse"."pulse_chat";
-
-drop policy "Users can see their own domain data" on "mod_pulse"."pulse_chat";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_pulse"."pulse_chat_files";
-
-drop policy "SuperAdmins can see all data" on "mod_pulse"."pulse_chat_files";
-
-drop policy "Users can see their own domain data" on "mod_pulse"."pulse_chat_files";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_pulse"."pulse_checklists";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_pulse"."pulse_checklists";
-
-drop policy "SuperAdmins can see all data" on "mod_pulse"."pulse_checklists";
-
-drop policy "Users can see their own domain data" on "mod_pulse"."pulse_checklists";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_pulse"."pulse_comments";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_pulse"."pulse_comments";
-
-drop policy "SuperAdmins can see all data" on "mod_pulse"."pulse_comments";
-
-drop policy "Users can see their own domain data" on "mod_pulse"."pulse_comments";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_pulse"."pulse_conversation_participants";
-
-drop policy "SuperAdmins can see all data" on "mod_pulse"."pulse_conversation_participants";
-
-drop policy "Users can see their own domain data" on "mod_pulse"."pulse_conversation_participants";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_pulse"."pulse_progress";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_pulse"."pulse_progress";
-
-drop policy "SuperAdmins can see all data" on "mod_pulse"."pulse_progress";
-
-drop policy "Users can see their own domain data" on "mod_pulse"."pulse_progress";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_pulse"."pulse_slas";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_pulse"."pulse_slas";
-
-drop policy "SuperAdmins can see all data" on "mod_pulse"."pulse_slas";
-
-drop policy "Users can see their own domain data" on "mod_pulse"."pulse_slas";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_pulse"."pulses";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_pulse"."pulses";
-
-drop policy "SuperAdmins can see all data" on "mod_pulse"."pulses";
-
-drop policy "Users can see their own domain data" on "mod_pulse"."pulses";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_pulse"."tasks";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_pulse"."tasks";
-
-drop policy "SuperAdmins can see all data" on "mod_pulse"."tasks";
-
-drop policy "Users can see their own domain data" on "mod_pulse"."tasks";
-
-drop policy "Administrators can view box contents in their domain and subdom" on "mod_wms"."box_contents";
-
-drop policy "SuperAdmins can view all box contents" on "mod_wms"."box_contents";
-
-drop policy "Users can view box contents in their domain" on "mod_wms"."box_contents";
-
-drop policy "Administrators can view box types in their domain and subdomain" on "mod_wms"."box_types";
-
-drop policy "SuperAdmins can view all box types" on "mod_wms"."box_types";
-
-drop policy "Users can view box types in their domain" on "mod_wms"."box_types";
-
-drop policy "Administrators can view carton contents in their domain and sub" on "mod_wms"."carton_contents";
-
-drop policy "SuperAdmins can view all carton contents" on "mod_wms"."carton_contents";
-
-drop policy "Users can view carton contents in their domain" on "mod_wms"."carton_contents";
-
-drop policy "Administrators can view carton types in their domain and subdom" on "mod_wms"."carton_types";
-
-drop policy "SuperAdmins can view all carton types" on "mod_wms"."carton_types";
-
-drop policy "Users can view carton types in their domain" on "mod_wms"."carton_types";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_wms"."inventory_backup";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_wms"."inventory_backup";
-
-drop policy "SuperAdmins can see all data" on "mod_wms"."inventory_backup";
-
-drop policy "Users can see their own domain data" on "mod_wms"."inventory_backup";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_wms"."inventory_limits";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_wms"."inventory_limits";
-
-drop policy "SuperAdmins can see all data" on "mod_wms"."inventory_limits";
-
-drop policy "Users can see their own domain data" on "mod_wms"."inventory_limits";
-
-drop policy "Administrators can view pallet contents in their domain and sub" on "mod_wms"."pallet_contents";
-
-drop policy "SuperAdmins can view all pallet contents" on "mod_wms"."pallet_contents";
-
-drop policy "Users can view pallet contents in their domain" on "mod_wms"."pallet_contents";
-
-drop policy "Administrators can view pallet types in their domain and subdom" on "mod_wms"."pallet_types";
-
-drop policy "SuperAdmins can view all pallet types" on "mod_wms"."pallet_types";
-
-drop policy "Users can view pallet types in their domain" on "mod_wms"."pallet_types";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_wms"."receipt_items";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_wms"."receipt_items";
-
-drop policy "SuperAdmins can see all data" on "mod_wms"."receipt_items";
-
-drop policy "Users can see their own domain data" on "mod_wms"."receipt_items";
-
-drop policy "Administrators can view shipment boxes in their domain and subd" on "mod_wms"."shipment_boxes";
-
-drop policy "SuperAdmins can view all shipment boxes" on "mod_wms"."shipment_boxes";
-
-drop policy "Users can view shipment boxes in their domain" on "mod_wms"."shipment_boxes";
-
-drop policy "Administrators can view shipment cartons in their domain and su" on "mod_wms"."shipment_cartons";
-
-drop policy "SuperAdmins can view all shipment cartons" on "mod_wms"."shipment_cartons";
-
-drop policy "Users can view shipment cartons in their domain" on "mod_wms"."shipment_cartons";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_wms"."shipment_items";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_wms"."shipment_items";
-
-drop policy "SuperAdmins can see all data" on "mod_wms"."shipment_items";
-
-drop policy "Users can see their own domain data" on "mod_wms"."shipment_items";
-
-drop policy "Administrators can view shipment pallets in their domain and su" on "mod_wms"."shipment_pallets";
-
-drop policy "SuperAdmins can view all shipment pallets" on "mod_wms"."shipment_pallets";
-
-drop policy "Users can view shipment pallets in their domain" on "mod_wms"."shipment_pallets";
-
-drop policy "Administrators can view shipment standalone items in their doma" on "mod_wms"."shipment_standalone_items";
-
-drop policy "SuperAdmins can view all shipment standalone items" on "mod_wms"."shipment_standalone_items";
-
-drop policy "Users can view shipment standalone items in their domain" on "mod_wms"."shipment_standalone_items";
-
-drop policy "Administrators can see their domain and subdomain data" on "mod_wms"."shipments";
-
-drop policy "Allow shared data access for specific subdomains" on "mod_wms"."shipments";
-
-drop policy "SuperAdmins can see all data" on "mod_wms"."shipments";
-
-drop policy "Users can see their own domain data" on "mod_wms"."shipments";
-
-drop view if exists "mod_base"."purchase_order_qc_tracking";
-
-drop view if exists "mod_base"."quality_control_summary";
-
-drop view if exists "mod_quality_control"."supplier_returns_summary";
-
-alter table "mod_quality_control"."quality_control_defects" alter column "severity" set data type public.defect_severity_type using "severity"::text::public.defect_severity_type;
-
-alter table "mod_quality_control"."supplier_returns" alter column "return_status" set default 'PENDING'::public.return_status_type;
-
-alter table "mod_quality_control"."supplier_returns" alter column "return_status" set data type public.return_status_type using "return_status"::text::public.return_status_type;
-
-create or replace view "mod_base"."purchase_order_qc_tracking" as  SELECT po.id AS purchase_order_id,
-    po.code AS purchase_order_code,
-    po.status AS purchase_order_status,
-    po.supplier_id,
-    s.name AS supplier_name,
-    poi.id AS purchase_order_item_id,
-    poi.name AS item_name,
-    poi.quantity_ordered,
-    poi.quantity_received,
-    poi.quantity_defect,
-    poi.is_completed AS item_completed,
-    poi.is_quantity_moved AS item_moved_to_inventory,
-    qc.id AS quality_control_id,
-    qc.code AS qc_code,
-    qc.status AS qc_status,
-    qc.quantity_checked,
-    qc.quantity_passed,
-    qc.quantity_failed,
-    qc.completed_date AS qc_completed_date,
-    qc.inspector_id,
-    u.email AS inspector_email,
-    COALESCE(defect_summary.defects_found, (0)::bigint) AS defects_found,
-    COALESCE(checklist_summary.checklist_items_completed, (0)::bigint) AS checklist_items_completed,
-    COALESCE(return_summary.supplier_returns_created, (0)::bigint) AS supplier_returns_created,
-        CASE
-            WHEN (qc.id IS NULL) THEN 'QC_PENDING'::text
-            WHEN (qc.status = 'PASSED'::text) THEN 'QC_PASSED'::text
-            WHEN (qc.status = 'CONDITIONALLY_ACCEPTED'::text) THEN 'QC_CONDITIONAL'::text
-            WHEN (qc.status = 'FAILED'::text) THEN 'QC_FAILED'::text
-            WHEN (qc.status = 'HOLD'::text) THEN 'QC_HOLD'::text
-            WHEN (qc.status = ANY (ARRAY['PLANNED'::text, 'IN_PROGRESS'::text])) THEN 'QC_IN_PROGRESS'::text
-            ELSE 'QC_UNKNOWN'::text
-        END AS overall_status
-   FROM (((((((mod_base.purchase_orders po
-     JOIN mod_base.purchase_order_items poi ON ((po.id = poi.purchase_order_id)))
-     LEFT JOIN mod_base.suppliers s ON ((po.supplier_id = s.id)))
-     LEFT JOIN mod_base.quality_control qc ON ((poi.id = qc.purchase_order_item_id)))
-     LEFT JOIN auth.users u ON ((qc.inspector_id = u.id)))
-     LEFT JOIN ( SELECT quality_control_defects.quality_control_id,
-            count(*) AS defects_found
-           FROM mod_quality_control.quality_control_defects
-          WHERE (NOT quality_control_defects.is_deleted)
-          GROUP BY quality_control_defects.quality_control_id) defect_summary ON ((qc.id = defect_summary.quality_control_id)))
-     LEFT JOIN ( SELECT quality_control_checklist_results.quality_control_id,
-            count(*) AS checklist_items_completed
-           FROM mod_quality_control.quality_control_checklist_results
-          WHERE (NOT quality_control_checklist_results.is_deleted)
-          GROUP BY quality_control_checklist_results.quality_control_id) checklist_summary ON ((qc.id = checklist_summary.quality_control_id)))
-     LEFT JOIN ( SELECT supplier_returns.quality_control_id,
-            count(*) AS supplier_returns_created
-           FROM mod_quality_control.supplier_returns
-          GROUP BY supplier_returns.quality_control_id) return_summary ON ((qc.id = return_summary.quality_control_id)))
-  WHERE ((NOT po.is_deleted) AND (NOT poi.is_deleted))
-  ORDER BY po.code, poi.name;
-
-
-create or replace view "mod_base"."quality_control_summary" as  SELECT qc.id,
-    qc.code,
-    qc.name,
-    qc.status,
-    qc.reference_type,
-    qc.reference_id,
-    qc.inspector_id,
-    qc.quantity_checked,
-    qc.quantity_passed,
-    qc.quantity_failed,
-    count(DISTINCT qcd.id) AS defect_count,
-    count(DISTINCT qcm.id) AS measurement_count,
-    count(DISTINCT qcr.id) AS checklist_count,
-    qc.created_at,
-    qc.completed_date,
-    u.email AS inspector_email,
-    (u.raw_user_meta_data ->> 'full_name'::text) AS inspector_name,
-    qc.purchase_order_item_id,
-    po.code AS purchase_order_code,
-    po.supplier_id,
-    poi.name AS item_name,
-    poi.quantity_ordered,
-    poi.quantity_received,
-    poi.quantity_defect,
-    s.name AS supplier_name,
-        CASE
-            WHEN (qc.purchase_order_item_id IS NOT NULL) THEN 'INCOMING_MATERIAL'::text
-            WHEN (qc.reference_type = 'WORK_ORDER'::text) THEN 'PRODUCTION'::text
-            WHEN (qc.reference_type = 'SALES_ORDER'::text) THEN 'OUTGOING'::text
-            ELSE 'OTHER'::text
-        END AS qc_type
-   FROM (((((((mod_base.quality_control qc
-     LEFT JOIN mod_base.purchase_order_items poi ON ((qc.purchase_order_item_id = poi.id)))
-     LEFT JOIN mod_base.purchase_orders po ON ((poi.purchase_order_id = po.id)))
-     LEFT JOIN mod_base.suppliers s ON ((po.supplier_id = s.id)))
-     LEFT JOIN mod_quality_control.quality_control_defects qcd ON (((qc.id = qcd.quality_control_id) AND (NOT qcd.is_deleted))))
-     LEFT JOIN mod_quality_control.quality_control_measurements qcm ON (((qc.id = qcm.quality_control_id) AND (NOT qcm.is_deleted))))
-     LEFT JOIN mod_quality_control.quality_control_checklist_results qcr ON (((qc.id = qcr.quality_control_id) AND (NOT qcr.is_deleted))))
-     LEFT JOIN auth.users u ON ((qc.inspector_id = u.id)))
-  WHERE (NOT qc.is_deleted)
-  GROUP BY qc.id, po.code, po.supplier_id, poi.name, poi.quantity_ordered, poi.quantity_received, poi.quantity_defect, s.name, u.email, u.raw_user_meta_data;
-
-
-create or replace view "mod_quality_control"."supplier_returns_summary" as  SELECT sr.id,
-    sr.return_number,
-    sr.return_date,
-    sr.return_status,
-    sr.return_quantity,
-    sr.total_cost,
-    sr.credit_amount,
-    s.name AS supplier_name,
-    a.name AS article_name,
-    qc.code AS qc_code,
-    sr.created_at,
-    sr.updated_at
-   FROM (((mod_quality_control.supplier_returns sr
-     LEFT JOIN mod_base.suppliers s ON ((sr.supplier_id = s.id)))
-     LEFT JOIN mod_base.articles a ON ((sr.article_id = a.id)))
-     LEFT JOIN mod_base.quality_control qc ON ((sr.quality_control_id = qc.id)))
-  WHERE (NOT sr.is_deleted);
-
-
-
-  create policy "superAdmin can delete"
-  on "mod_admin"."domain_modules"
-  as permissive
-  for delete
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can insert into"
-  on "mod_admin"."domain_modules"
-  as permissive
-  for insert
-  to public
-with check ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can update"
-  on "mod_admin"."domain_modules"
-  as permissive
-  for update
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Admins can delete from domain_users"
-  on "mod_admin"."domain_users"
-  as permissive
-  for delete
-  to public
-using ((public.get_my_claim_text('role'::text) = ANY (ARRAY['admin'::text, 'superAdmin'::text])));
-
-
-
-  create policy "Admins can insert into domain_users"
-  on "mod_admin"."domain_users"
-  as permissive
-  for insert
-  to public
-with check ((public.get_my_claim_text('role'::text) = ANY (ARRAY['admin'::text, 'superAdmin'::text])));
-
-
-
-  create policy "Admins can update domain_users"
-  on "mod_admin"."domain_users"
-  as permissive
-  for update
-  to public
-using ((public.get_my_claim_text('role'::text) = ANY (ARRAY['admin'::text, 'superAdmin'::text])));
-
-
-
-  create policy "Admins can delete from domains"
-  on "mod_admin"."domains"
-  as permissive
-  for delete
-  to public
-using ((public.get_my_claim_text('role'::text) = ANY (ARRAY['admin'::text, 'superAdmin'::text])));
-
-
-
-  create policy "Admins can insert into domains"
-  on "mod_admin"."domains"
-  as permissive
-  for insert
-  to public
-with check ((public.get_my_claim_text('role'::text) = ANY (ARRAY['admin'::text, 'superAdmin'::text])));
-
-
-
-  create policy "Admins can update domains"
-  on "mod_admin"."domains"
-  as permissive
-  for update
-  to public
-using ((public.get_my_claim_text('role'::text) = ANY (ARRAY['admin'::text, 'superAdmin'::text])));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."announcements"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."announcements"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."announcements"
-  as permissive
-  for all
-  to public
-using ((COALESCE(public.get_my_claim_text('role'::text), ''::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_base"."announcements"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."article_categories"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."article_categories"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."article_categories"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_base"."article_categories"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."customer_addresses"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."customer_addresses"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."customer_addresses"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can delete their own domain data"
-  on "mod_base"."customer_addresses"
-  as permissive
-  for delete
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Users can insert addresses in their domain"
-  on "mod_base"."customer_addresses"
-  as permissive
-  for insert
-  to public
-with check (((( SELECT auth.uid() AS uid) IS NOT NULL) AND ((domain_id IN ( SELECT domain_users.domain_id
-   FROM mod_admin.domain_users
-  WHERE (domain_users.user_id = auth.uid()))) OR (public.get_my_claim_text('role'::text) = ANY (ARRAY['admin'::text, 'superAdmin'::text])) OR (public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR ('*'::text = ANY (shared_with)))));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_base"."customer_addresses"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Users can update addresses in their domain"
-  on "mod_base"."customer_addresses"
-  as permissive
-  for update
-  to public
-using (((( SELECT auth.uid() AS uid) IS NOT NULL) AND ((domain_id IN ( SELECT domain_users.domain_id
-   FROM mod_admin.domain_users
-  WHERE (domain_users.user_id = auth.uid()))) OR (public.get_my_claim_text('role'::text) = ANY (ARRAY['admin'::text, 'superAdmin'::text])) OR (public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR ('*'::text = ANY (shared_with)))));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."customers"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."customers"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."customers"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can insert customers in their domain"
-  on "mod_base"."customers"
-  as permissive
-  for insert
-  to public
-with check (((( SELECT auth.uid() AS uid) IS NOT NULL) AND ((domain_id IN ( SELECT domain_users.domain_id
-   FROM mod_admin.domain_users
-  WHERE (domain_users.user_id = auth.uid()))) OR (public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR ('*'::text = ANY (shared_with)))));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_base"."customers"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Users can update customers in their domain"
-  on "mod_base"."customers"
-  as permissive
-  for update
-  to public
-using (((( SELECT auth.uid() AS uid) IS NOT NULL) AND ((domain_id IN ( SELECT domain_users.domain_id
-   FROM mod_admin.domain_users
-  WHERE (domain_users.user_id = auth.uid()))) OR (public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR ('*'::text = ANY (shared_with)))));
-
-
-
-  create policy "Users can view customers in their domain"
-  on "mod_base"."customers"
-  as permissive
-  for select
-  to public
-using (((( SELECT auth.uid() AS uid) IS NOT NULL) AND ((domain_id IN ( SELECT domain_users.domain_id
-   FROM mod_admin.domain_users
-  WHERE (domain_users.user_id = auth.uid()))) OR (public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR ('*'::text = ANY (shared_with)) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."departments"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."departments"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."departments"
-  as permissive
-  for all
-  to public
-using ((COALESCE(public.get_my_claim_text('role'::text), ''::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_base"."departments"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."employees"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."employees"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."employees"
-  as permissive
-  for all
-  to public
-using ((COALESCE(public.get_my_claim_text('role'::text), ''::text) = 'superAdmin'::text));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."employees_departments"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."employees_departments"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."employees_departments"
-  as permissive
-  for all
-  to public
-using ((COALESCE(public.get_my_claim_text('role'::text), ''::text) = 'superAdmin'::text));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."purchase_order_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."purchase_order_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."purchase_order_items"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_base"."purchase_order_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."purchase_orders"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."purchase_orders"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."purchase_orders"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_base"."purchase_orders"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."report_template"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."report_template"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."report_template"
-  as permissive
-  for select
-  to public
-using ((COALESCE(public.get_my_claim_text('role'::text), ''::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_base"."report_template"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."suppliers"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."suppliers"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."suppliers"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_base"."suppliers"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_base"."units_of_measure"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_base"."units_of_measure"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_base"."units_of_measure"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_base"."units_of_measure"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "superAdmin can delete"
-  on "mod_datalayer"."fields"
-  as permissive
-  for delete
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can insert into"
-  on "mod_datalayer"."fields"
-  as permissive
-  for insert
-  to public
-with check ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can update"
-  on "mod_datalayer"."fields"
-  as permissive
-  for update
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can delete"
-  on "mod_datalayer"."main_menu"
-  as permissive
-  for delete
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can insert into"
-  on "mod_datalayer"."main_menu"
-  as permissive
-  for insert
-  to public
-with check ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can update"
-  on "mod_datalayer"."main_menu"
-  as permissive
-  for update
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can delete"
-  on "mod_datalayer"."modules"
-  as permissive
-  for delete
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can insert into"
-  on "mod_datalayer"."modules"
-  as permissive
-  for insert
-  to public
-with check ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can update"
-  on "mod_datalayer"."modules"
-  as permissive
-  for update
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can delete"
-  on "mod_datalayer"."page_categories"
-  as permissive
-  for delete
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can insert into"
-  on "mod_datalayer"."page_categories"
-  as permissive
-  for insert
-  to public
-with check ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can update"
-  on "mod_datalayer"."page_categories"
-  as permissive
-  for update
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can delete"
-  on "mod_datalayer"."pages"
-  as permissive
-  for delete
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can insert into"
-  on "mod_datalayer"."pages"
-  as permissive
-  for insert
-  to public
-with check ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can update"
-  on "mod_datalayer"."pages"
-  as permissive
-  for update
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "SuperAdmins can manage all data"
-  on "mod_datalayer"."pages_departments"
-  as permissive
-  for all
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_datalayer"."pages_departments"
-  as permissive
-  for select
-  to public
-using (((is_deleted = false) AND (EXISTS ( SELECT 1
-   FROM mod_base.departments d
-  WHERE ((d.id = pages_departments.department_id) AND ((public.get_my_claim_text('domain_id'::text))::uuid = d.domain_id))))));
-
-
-
-  create policy "superAdmin can delete"
-  on "mod_datalayer"."tables"
-  as permissive
-  for delete
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can insert into"
-  on "mod_datalayer"."tables"
-  as permissive
-  for insert
-  to public
-with check ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "superAdmin can update"
-  on "mod_datalayer"."tables"
-  as permissive
-  for update
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_manufacturing"."departments"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_manufacturing"."departments"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_manufacturing"."departments"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_manufacturing"."departments"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_manufacturing"."locations"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_manufacturing"."locations"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_manufacturing"."locations"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_manufacturing"."locations"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_manufacturing"."production_logs"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_manufacturing"."production_logs"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_manufacturing"."production_logs"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_manufacturing"."production_logs"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_manufacturing"."recipes"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_manufacturing"."recipes"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_manufacturing"."recipes"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_manufacturing"."recipes"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_manufacturing"."scheduled_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'administrator'::text) AND ((public.get_my_claim_text('domain_id'::text))::uuid = domain_id)));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_manufacturing"."scheduled_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'superadmin'::text) OR (domain_id = ANY ((public.get_my_claim_text('shared_domains'::text))::uuid[]))));
-
-
-
-  create policy "Authenticated users can insert data"
-  on "mod_manufacturing"."scheduled_items"
-  as permissive
-  for insert
-  to public
-with check (((auth.role() = 'authenticated'::text) AND ((public.get_my_claim_text('domain_id'::text))::uuid = domain_id)));
-
-
-
-  create policy "Authenticated users can update data"
-  on "mod_manufacturing"."scheduled_items"
-  as permissive
-  for update
-  to public
-using (((auth.role() = 'authenticated'::text) AND ((public.get_my_claim_text('domain_id'::text))::uuid = domain_id)));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_manufacturing"."scheduled_items"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superadmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_manufacturing"."scheduled_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see domain work cycles"
-  on "mod_manufacturing"."work_cycles"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid)) AND (is_deleted = false)));
-
-
-
-  create policy "SuperAdmins can see all work cycles"
-  on "mod_manufacturing"."work_cycles"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'superAdmin'::text) AND (is_deleted = false)));
-
-
-
-  create policy "Users can see department shared work cycles"
-  on "mod_manufacturing"."work_cycles"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND (is_deleted = false))));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_manufacturing"."work_order_quality_summary"
-  as permissive
-  for select
-  to public
-using (
-CASE
-    WHEN (public.get_my_claim_text('user_role'::text) = 'SuperAdmin'::text) THEN true
-    WHEN (public.get_my_claim_text('user_role'::text) = 'Admin'::text) THEN ((domain_id = (public.get_my_claim_text('domain_id'::text))::uuid) OR (domain_id IN ( SELECT domains.id
-       FROM mod_admin.domains
-      WHERE (domains.parent_domain_id = (public.get_my_claim_text('domain_id'::text))::uuid))))
-    ELSE (domain_id = (public.get_my_claim_text('domain_id'::text))::uuid)
-END);
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_manufacturing"."work_order_quality_summary"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = ANY ((shared_with)::uuid[])));
-
-
-
-  create policy "Authenticated users can delete data"
-  on "mod_manufacturing"."work_order_quality_summary"
-  as permissive
-  for update
-  to authenticated
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id))
-with check ((is_deleted = true));
-
-
-
-  create policy "Authenticated users can insert data"
-  on "mod_manufacturing"."work_order_quality_summary"
-  as permissive
-  for insert
-  to authenticated
-with check (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Authenticated users can update data"
-  on "mod_manufacturing"."work_order_quality_summary"
-  as permissive
-  for update
-  to authenticated
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id))
-with check (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_manufacturing"."work_order_quality_summary"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('user_role'::text) = 'SuperAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_manufacturing"."work_order_quality_summary"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see domain work orders"
-  on "mod_manufacturing"."work_orders"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid)) AND (is_deleted = false)));
-
-
-
-  create policy "Authenticated users can see domain work orders"
-  on "mod_manufacturing"."work_orders"
-  as permissive
-  for select
-  to public
-using (((auth.uid() IS NOT NULL) AND ((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) AND (is_deleted = false)));
-
-
-
-  create policy "SuperAdmins can see all work orders"
-  on "mod_manufacturing"."work_orders"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'superAdmin'::text) AND (is_deleted = false)));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_manufacturing"."work_steps"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_manufacturing"."work_steps"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_manufacturing"."work_steps"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_manufacturing"."work_steps"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_manufacturing"."workstations"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_manufacturing"."workstations"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_manufacturing"."workstations"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_manufacturing"."workstations"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_pulse"."department_notification_configs"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_pulse"."department_notification_configs"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_pulse"."department_notification_configs"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see domain notifications"
-  on "mod_pulse"."notifications"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid)) AND (is_deleted = false)));
-
-
-
-  create policy "SuperAdmins can see all notifications"
-  on "mod_pulse"."notifications"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'superAdmin'::text) AND (is_deleted = false)));
-
-
-
-  create policy "Users can see department shared notifications"
-  on "mod_pulse"."notifications"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND (is_deleted = false))));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_pulse"."pulse_chat"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_pulse"."pulse_chat"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_pulse"."pulse_chat"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_pulse"."pulse_chat"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_pulse"."pulse_chat_files"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_pulse"."pulse_chat_files"
-  as permissive
-  for all
-  to public
-using ((COALESCE(public.get_my_claim_text('role'::text), ''::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_pulse"."pulse_chat_files"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_pulse"."pulse_checklists"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_pulse"."pulse_checklists"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_pulse"."pulse_checklists"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_pulse"."pulse_checklists"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_pulse"."pulse_comments"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_pulse"."pulse_comments"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_pulse"."pulse_comments"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_pulse"."pulse_comments"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_pulse"."pulse_conversation_participants"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_pulse"."pulse_conversation_participants"
-  as permissive
-  for all
-  to public
-using ((COALESCE(public.get_my_claim_text('role'::text), ''::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_pulse"."pulse_conversation_participants"
-  as permissive
-  for all
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_pulse"."pulse_progress"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_pulse"."pulse_progress"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_pulse"."pulse_progress"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_pulse"."pulse_progress"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_pulse"."pulse_slas"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_pulse"."pulse_slas"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_pulse"."pulse_slas"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_pulse"."pulse_slas"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_pulse"."pulses"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_pulse"."pulses"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_pulse"."pulses"
-  as permissive
-  for select
-  to public
-using ((COALESCE(public.get_my_claim_text('role'::text), ''::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_pulse"."pulses"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_pulse"."tasks"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_pulse"."tasks"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_pulse"."tasks"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_pulse"."tasks"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can view box contents in their domain and subdom"
-  on "mod_wms"."box_contents"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can view all box contents"
-  on "mod_wms"."box_contents"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can view box contents in their domain"
-  on "mod_wms"."box_contents"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can view box types in their domain and subdomain"
-  on "mod_wms"."box_types"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can view all box types"
-  on "mod_wms"."box_types"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can view box types in their domain"
-  on "mod_wms"."box_types"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can view carton contents in their domain and sub"
-  on "mod_wms"."carton_contents"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can view all carton contents"
-  on "mod_wms"."carton_contents"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can view carton contents in their domain"
-  on "mod_wms"."carton_contents"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can view carton types in their domain and subdom"
-  on "mod_wms"."carton_types"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can view all carton types"
-  on "mod_wms"."carton_types"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can view carton types in their domain"
-  on "mod_wms"."carton_types"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_wms"."inventory_backup"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_wms"."inventory_backup"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_wms"."inventory_backup"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_wms"."inventory_backup"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_wms"."inventory_limits"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_wms"."inventory_limits"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_wms"."inventory_limits"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_wms"."inventory_limits"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can view pallet contents in their domain and sub"
-  on "mod_wms"."pallet_contents"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can view all pallet contents"
-  on "mod_wms"."pallet_contents"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can view pallet contents in their domain"
-  on "mod_wms"."pallet_contents"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can view pallet types in their domain and subdom"
-  on "mod_wms"."pallet_types"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can view all pallet types"
-  on "mod_wms"."pallet_types"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can view pallet types in their domain"
-  on "mod_wms"."pallet_types"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_wms"."receipt_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_wms"."receipt_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_wms"."receipt_items"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_wms"."receipt_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can view shipment boxes in their domain and subd"
-  on "mod_wms"."shipment_boxes"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can view all shipment boxes"
-  on "mod_wms"."shipment_boxes"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can view shipment boxes in their domain"
-  on "mod_wms"."shipment_boxes"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can view shipment cartons in their domain and su"
-  on "mod_wms"."shipment_cartons"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can view all shipment cartons"
-  on "mod_wms"."shipment_cartons"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can view shipment cartons in their domain"
-  on "mod_wms"."shipment_cartons"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_wms"."shipment_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_wms"."shipment_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_wms"."shipment_items"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_wms"."shipment_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can view shipment pallets in their domain and su"
-  on "mod_wms"."shipment_pallets"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can view all shipment pallets"
-  on "mod_wms"."shipment_pallets"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can view shipment pallets in their domain"
-  on "mod_wms"."shipment_pallets"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can view shipment standalone items in their doma"
-  on "mod_wms"."shipment_standalone_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can view all shipment standalone items"
-  on "mod_wms"."shipment_standalone_items"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can view shipment standalone items in their domain"
-  on "mod_wms"."shipment_standalone_items"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-
-  create policy "Administrators can see their domain and subdomain data"
-  on "mod_wms"."shipments"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('role'::text) = 'admin'::text) AND (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id) OR mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "Allow shared data access for specific subdomains"
-  on "mod_wms"."shipments"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text) = ANY (shared_with)) OR (('*'::text = ANY (shared_with)) AND mod_admin.is_subdomain(domain_id, (public.get_my_claim_text('domain_id'::text))::uuid))));
-
-
-
-  create policy "SuperAdmins can see all data"
-  on "mod_wms"."shipments"
-  as permissive
-  for select
-  to public
-using ((public.get_my_claim_text('role'::text) = 'superAdmin'::text));
-
-
-
-  create policy "Users can see their own domain data"
-  on "mod_wms"."shipments"
-  as permissive
-  for select
-  to public
-using (((public.get_my_claim_text('domain_id'::text))::uuid = domain_id));
-
-
-CREATE TRIGGER trigger_update_expected_delivery_date_internal AFTER INSERT OR UPDATE OF production_date ON mod_base.internal_sales_order_items FOR EACH ROW EXECUTE FUNCTION public.update_expected_delivery_date();
-
-CREATE TRIGGER trigger_update_expected_delivery_date AFTER INSERT OR UPDATE OF production_date ON mod_base.sales_order_items FOR EACH ROW EXECUTE FUNCTION public.update_expected_delivery_date();
-
-CREATE TRIGGER trigger_update_receipt_supplier BEFORE INSERT OR UPDATE ON mod_wms.receipts FOR EACH ROW EXECUTE FUNCTION public.update_receipt_supplier_from_po();
 
 
   create policy "Allow anonymous user creation"
