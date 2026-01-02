@@ -4813,28 +4813,6 @@ $$;
 ALTER FUNCTION "mod_pulse"."delete_old_chat_attachment"() OWNER TO "postgres";
 
 
-CREATE OR REPLACE FUNCTION "mod_pulse"."fn_trigger_fcm_push"() RETURNS "trigger"
-    LANGUAGE "plpgsql"
-    AS $$
-BEGIN
-  PERFORM
-    net.http_post(
-      url := 'https://hffdufdierbghwcnjswt.supabase.co/functions/v1/push',
-      headers := '{"Content-Type": "application/json"}'::jsonb,
-      body := jsonb_build_object(
-        'record', row_to_json(NEW)::jsonb,
-        'event', 'INSERT'
-      ),
-      timeout_milliseconds := 1000
-    );
-  RETURN NEW;
-END;
-$$;
-
-
-ALTER FUNCTION "mod_pulse"."fn_trigger_fcm_push"() OWNER TO "postgres";
-
-
 CREATE OR REPLACE FUNCTION "mod_pulse"."get_user_notifications"("p_limit" integer DEFAULT 50, "p_offset" integer DEFAULT 0, "p_is_read" boolean DEFAULT NULL::boolean) RETURNS TABLE("id" "uuid", "name" "text", "description" "text", "code" "text", "type" "text", "is_read" boolean, "avatar_url" "text", "barcode" "text", "created_at" timestamp with time zone, "updated_at" timestamp with time zone, "created_by" "uuid", "updated_by" "uuid", "pulse_id" "uuid", "total_count" bigint)
     LANGUAGE "plpgsql" SECURITY DEFINER
     AS $$
@@ -9092,7 +9070,7 @@ CREATE TABLE IF NOT EXISTS "mod_base"."announcements" (
     "updated_at" timestamp with time zone DEFAULT "now"() NOT NULL,
     "created_by" "uuid",
     "updated_by" "uuid",
-    "testing" "text"
+    "testing_column" "text"
 );
 
 
@@ -21560,12 +21538,6 @@ GRANT ALL ON FUNCTION "mod_pulse"."delete_chat_attachment"("file_url" "text", OU
 GRANT ALL ON FUNCTION "mod_pulse"."delete_old_chat_attachment"() TO "anon";
 GRANT ALL ON FUNCTION "mod_pulse"."delete_old_chat_attachment"() TO "authenticated";
 GRANT ALL ON FUNCTION "mod_pulse"."delete_old_chat_attachment"() TO "service_role";
-
-
-
-GRANT ALL ON FUNCTION "mod_pulse"."fn_trigger_fcm_push"() TO "anon";
-GRANT ALL ON FUNCTION "mod_pulse"."fn_trigger_fcm_push"() TO "authenticated";
-GRANT ALL ON FUNCTION "mod_pulse"."fn_trigger_fcm_push"() TO "service_role";
 
 
 
