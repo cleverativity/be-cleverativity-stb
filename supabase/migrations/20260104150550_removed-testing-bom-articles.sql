@@ -4,8 +4,6 @@ drop view if exists "mod_quality_control"."supplier_returns_summary";
 
 drop view if exists "mod_wms"."current_inventory";
 
-alter table "mod_base"."articles" drop column "testing";
-
 alter table "mod_base"."bom_articles" drop column "testing";
 
 set check_function_bodies = off;
