@@ -214,7 +214,8 @@ alter table "mod_admin"."user_profiles" enable row level security;
     "created_at" timestamp with time zone not null default now(),
     "updated_at" timestamp with time zone not null default now(),
     "created_by" uuid,
-    "updated_by" uuid
+    "updated_by" uuid,
+    "testing" text
       );
 
 
@@ -7460,22 +7461,22 @@ BEGIN
     -- If the INSERT doesn't explicitly provide created_by,
     -- default to the user performing this operation.
     NEW.created_by := COALESCE(NEW.created_by, auth.uid());
-    
+
     -- Auto-populate domain_id from user's JWT claims if not provided
     IF NEW.domain_id IS NULL THEN
       NEW.domain_id := (SELECT get_my_claim_text('domain_id')::uuid);
     END IF;
-    
+
     -- Set planned_date to now if not provided and status is PLANNED
     IF NEW.planned_date IS NULL AND NEW.status = 'PLANNED' THEN
       NEW.planned_date := now();
     END IF;
-    
+
   ELSIF TG_OP = 'UPDATE' THEN
     -- On UPDATE, set the user performing this operation and the updated timestamp
     NEW.updated_by := auth.uid();
     NEW.updated_at := now();
-    
+
     -- Auto-set timing fields based on status changes
     IF OLD.status != NEW.status THEN
       CASE NEW.status
