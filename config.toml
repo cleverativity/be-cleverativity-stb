@@ -4,6 +4,9 @@
 # working directory name when running `supabase init`.
 project_id = "supabase-project-stb"
 
+[remotes.staging]
+project_id = "tyakuhvfotyzqasicupl"
+
 [api]
 enabled = true
 # Port to use for the API URL.
@@ -319,7 +322,7 @@ enabled = false
 # Use Firebase Auth as a third-party provider alongside Supabase Auth.
 [auth.third_party.firebase]
 enabled = false
-# project_id = "my-firebase-project"
+# project_id = "tyakuhvfotyzqasicupl"
 
 # Use Auth0 as a third-party provider alongside Supabase Auth.
 [auth.third_party.auth0]
